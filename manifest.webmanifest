@@ -1,0 +1,29 @@
+{
+  "name": "選挙のしくみ",
+  "short_name": "選挙のしくみ",
+  "description": "投票のしかた・選挙権・選挙運動のきまり・比例代表の議席の配り方を、公職選挙法と総務省の説明に沿って選ぶ1日5問",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eceff3",
+  "theme_color": "#eceff3",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
