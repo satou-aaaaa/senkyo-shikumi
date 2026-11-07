@@ -29,7 +29,7 @@ const len = (s) => [...String(s)].length;
     if (t.k === "q" && !/[0-9０-９]|条|総務省/.test(t.why)) bad.push(t.id + " 解説に条文か総務省の出どころが無い");
   }
   const n = G.TE.filter((t) => t.k === "q").length, per = Object.keys(G.CAT).map((c) => G.TE.filter((t) => t.k === "q" && t.cat === c).length);
-  check(`しくみは${n}（分類ごと ${per.join("・")}）。どれも問い・選び肢3つ・ひとこと・解説・出典があり、長すぎない`, n >= 50 && per.every((x) => x >= 8) && bad.length === 0, bad.join(","));
+  check(`しくみは${n}（分類ごと ${per.join("・")}）。どれも問い・選び肢3つ・ひとこと・解説・出典があり、長すぎない`, n >= 75 && per.every((x) => x >= 8) && bad.length === 0, bad.join(","));
   check("上級のしくみが12以上", G.TE.filter((t) => t.k === "q" && t.h).length >= 12, G.TE.filter((t) => t.h).length);
 }
 {
@@ -202,11 +202,13 @@ try {
   check("ヒント2はまちがいの選び肢を1つ消す・ヒントは2回まで", await p.locator(".ch.ng").count() === 1 && await p.locator("#hint:disabled").count() === 1);
   await solve(p);
   check("ヒント2回は★1", (await p.getAttribute(".verdict .stars", "aria-label")) === "星1つ");
+  check("答えたあとは、押せないヒントのボタンを隠し、空いた知らせの欄も場所を取らない", await p.locator("#hint").isHidden() && await p.locator("#hintbox").isHidden() && (await p.$eval("#msg", (e) => e.getBoundingClientRect().height)) === 0);
   await p.click("#next");
   await solve(p); await p.click("#next");
   await p.waitForTimeout(150);
   const s1 = await mem(p);
   check("5問で結果：今日の記録に1問ごとのまちがい（1・0・0・2・0）", JSON.stringify(s1.days[TODAY]?.m) === "[1,0,0,2,0]");
+  check("結果に星の合計（12/15）と一度で正解した数（3/5）を出す", /星 12 \/ 15/.test(await p.textContent("#score")) && /一度で正解 3 \/ 5/.test(await p.textContent("#score")), await p.textContent("#score"));
   check("今日の記録に解いた問題の札も残す（あとでしくみが増えても結果に元の問題を出す）", JSON.stringify(s1.days[TODAY]?.l) === JSON.stringify(tags));
   const share = await p.textContent(".share");
   check("シェアの文に問題・答えを出さない（印だけ）", /第\d+回/.test(share) && /🟢/.test(share) && !G.TE.some((t) => share.includes(t.name) || share.includes(t.lead)) && !/党|議席/.test(share), share);
@@ -236,6 +238,7 @@ try {
   check("おさらいで一度で正解すると、おさらいから外れる", !(await mem(p)).miss.includes(tags[0]));
   // しくみ帳：説明と出典、そのしくみだけで練習
   await p.goto(url); await p.waitForTimeout(150); await p.click("#go-dex");
+  check("しくみ帳の分類ごとに、集めた数／全部の数を出す", await p.locator(".agrp .cnt").count() === Object.keys(G.CAT).length && /^\d+\/\d+$/.test(await p.textContent(".agrp .cnt")));
   const te = await p.getAttribute(".book button", "data-t");
   await p.click(".book button");
   check("しくみ帳を押すと、ひとこと・くわしく・出典（e-Gov か総務省のリンク）", /ひとことで/.test(await p.textContent("#tecard")) && (await p.textContent("#tecard")).includes("くわしく") && await p.locator("#tecard a[href*='e-gov.go.jp'], #tecard a[href*='soumu.go.jp']").count() >= 1);

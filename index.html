@@ -86,6 +86,11 @@ button.sub:disabled,button.main:disabled{opacity:.45;cursor:default}
 @keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 @keyframes up{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
 @keyframes stamp{0%{transform:scale(2.2) rotate(-18deg);opacity:0}60%{transform:scale(.92) rotate(-12deg);opacity:1}100%{transform:scale(1) rotate(-12deg)}}
+.msg:empty{min-height:0;margin-top:-14px}
+#hintbox:empty{display:none}
+.score{text-align:center;margin:0;font-weight:700;color:var(--ink2)}
+.score b{font-size:1.25rem;color:var(--ink)}
+.agrp .cnt{font-weight:700;color:var(--ink2);margin-left:.4rem;font-size:.85em}
 .msg{min-height:1.6rem;text-align:center;font-weight:700;font-size:.95rem;margin:0}
 .msg.bad{color:var(--shu2)}
 .verdict{position:relative;overflow:hidden;background:var(--paper);border:2px solid var(--ok);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 6px 0 #1d2b2620;animation:up .35s ease-out}
@@ -618,7 +623,7 @@ const cutOf = () => { if (cur.hints < 2) return []; const left = cur.P.opts.map(
 function paint() {
   const cut = cutOf();
   document.querySelectorAll(".ch").forEach((b) => { const j = +b.dataset.j, ng = cur.wrong.includes(j) || cut.includes(j); b.classList.toggle("ng", ng); b.disabled = ng || cur.done; b.setAttribute("aria-label", cur.P.opts[j] + (ng ? "（ちがう）" : "")); });
-  const h = $("hint"); if (h) h.disabled = cur.done || cur.hints >= hmax();
+  const h = $("hint"); if (h) { h.disabled = cur.done || cur.hints >= hmax(); h.hidden = cur.done; } // 答えたあとは押せないボタンを出さない
   $("hintbox").innerHTML = cur.hints && !cur.done ? `<div class="hint" role="status">💡 ${esc(cur.P.look)}${cur.hints >= 2 ? "<br>💡 ちがう選び肢を1つ消しました。" : ""}</div>` : "";
 }
 function hint() { if (cur.done || cur.hints >= hmax()) return; if (!same(load().runs[MODE])) { toast("別の画面で先に進んでいます"); return play(); } cur.hints++; keep(); paint(); }
@@ -650,7 +655,7 @@ function choose(j) {
   });
   const st = starsOf(m), r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length;
   document.querySelectorAll(".ch").forEach((b) => { b.disabled = true; if (+b.dataset.j === P.ans) { b.classList.add("ok"); b.setAttribute("aria-label", P.opts[P.ans] + "（正解）"); } });
-  if ($("hint")) $("hint").disabled = true;
+  if ($("hint")) { $("hint").disabled = true; $("hint").hidden = true; }
   $("hintbox").innerHTML = ""; $("msg").className = "msg"; $("msg").textContent = "";
   const te = P.te ? G.BYTE[P.te] : null;
   $("after").innerHTML = `<div class="verdict" role="status">
@@ -714,6 +719,7 @@ function result(mode, k, first, prec, newAch = []) {
   app.innerHTML = `
     <header><button class="icon" id="back" aria-label="ホームへ">←</button><h1>選挙のしくみ<small>${mode === "d" ? `今日の5問 第${dayNo(k)}回` : late ? `第${dayNo(k)}回 あとから` : mode === "h" ? "上級" : "練習"}</small></h1></header>
     <p class="big">${total === 0 ? "全問正解！" : `${list.length}問 答えました`}</p>
+    <p class="score" id="score">星 <b>${rec.m.reduce((a, m) => a + starsOf(m), 0)}</b> / ${rec.m.length * 3}　・　一度で正解 <b>${rec.m.filter((m) => m === 0).length}</b> / ${rec.m.length}</p>
     ${newAch.length ? `<p class="achnew" id="achnew">${newAch.map((id) => `🏅 実績：${ACH.find((a) => a[0] === id)[1]}`).join("<br>")}</p>` : ""}
     ${(() => { const nx = nextAch(s); return nx ? `<p class="achnext" id="achnext">🎯 あと${nx.left}${nx.unit}で「${nx.name}」</p>` : ""; })()}
     <p class="agrp">今日覚えたこと</p>
@@ -750,7 +756,7 @@ function book() {
   app.innerHTML = `
     <header><button class="icon" id="back" aria-label="ホームへ">←</button><h1>しくみ帳<small>${n}/${G.TE.length}</small></h1></header>
     <p class="note">正解したしくみが集まります。押すと、決まりと出典が読めます。</p>
-    ${Object.keys(G.CAT).map((c) => `<p class="agrp">${G.CAT[c][0]} ${esc(G.CAT[c][1])}</p><div class="book">${G.TE.filter((t) => t.cat === c).map((t) => s.dex[t.id] > 0 ? `<button data-t="${t.id}"><span class="mk" aria-hidden="true">${t.icon}</span><span>${esc(t.name)}</span><span class="ct">${s.dex[t.id]}回</span></button>` : `<span class="none" role="img" aria-label="まだ集めていないしくみ">？</span>`).join("")}</div>`).join("")}
+    ${Object.keys(G.CAT).map((c) => `<p class="agrp">${G.CAT[c][0]} ${esc(G.CAT[c][1])}<span class="cnt">${G.TE.filter((t) => t.cat === c && s.dex[t.id] > 0).length}/${G.TE.filter((t) => t.cat === c).length}</span></p><div class="book">${G.TE.filter((t) => t.cat === c).map((t) => s.dex[t.id] > 0 ? `<button data-t="${t.id}"><span class="mk" aria-hidden="true">${t.icon}</span><span>${esc(t.name)}</span><span class="ct">${s.dex[t.id]}回</span></button>` : `<span class="none" role="img" aria-label="まだ集めていないしくみ">？</span>`).join("")}</div>`).join("")}
     ${footer()}`;
   $("back").onclick = home;
   document.querySelectorAll(".book button").forEach((b) => (b.onclick = () => teView(b.dataset.t)));
