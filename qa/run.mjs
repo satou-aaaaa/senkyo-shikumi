@@ -29,7 +29,7 @@ const len = (s) => [...String(s)].length;
     if (t.k === "q" && !/[0-9０-９]|条|総務省/.test(t.why)) bad.push(t.id + " 解説に条文か総務省の出どころが無い");
   }
   const n = G.TE.filter((t) => t.k === "q").length, per = Object.keys(G.CAT).map((c) => G.TE.filter((t) => t.k === "q" && t.cat === c).length);
-  check(`しくみは${n}（分類ごと ${per.join("・")}）。どれも問い・選び肢3つ・ひとこと・解説・出典があり、長すぎない`, n >= 50 && per.every((x) => x >= 8) && bad.length === 0, bad.join(","));
+  check(`しくみは${n}（分類ごと ${per.join("・")}）。どれも問い・選び肢3つ・ひとこと・解説・出典があり、長すぎない`, n >= 75 && per.every((x) => x >= 8) && bad.length === 0, bad.join(","));
   check("上級のしくみが12以上", G.TE.filter((t) => t.k === "q" && t.h).length >= 12, G.TE.filter((t) => t.h).length);
 }
 {
@@ -202,11 +202,13 @@ try {
   check("ヒント2はまちがいの選び肢を1つ消す・ヒントは2回まで", await p.locator(".ch.ng").count() === 1 && await p.locator("#hint:disabled").count() === 1);
   await solve(p);
   check("ヒント2回は★1", (await p.getAttribute(".verdict .stars", "aria-label")) === "星1つ");
+  check("答えたあとは、押せないヒントのボタンを隠し、空いた知らせの欄も場所を取らない", await p.locator("#hint").isHidden() && await p.locator("#hintbox").isHidden() && (await p.$eval("#msg", (e) => e.getBoundingClientRect().height)) === 0);
   await p.click("#next");
   await solve(p); await p.click("#next");
   await p.waitForTimeout(150);
   const s1 = await mem(p);
   check("5問で結果：今日の記録に1問ごとのまちがい（1・0・0・2・0）", JSON.stringify(s1.days[TODAY]?.m) === "[1,0,0,2,0]");
+  check("結果に星の合計（12/15）と一度で正解した数（3/5）を出す", /星 12 \/ 15/.test(await p.textContent("#score")) && /一度で正解 3 \/ 5/.test(await p.textContent("#score")), await p.textContent("#score"));
   check("今日の記録に解いた問題の札も残す（あとでしくみが増えても結果に元の問題を出す）", JSON.stringify(s1.days[TODAY]?.l) === JSON.stringify(tags));
   const share = await p.textContent(".share");
   check("シェアの文に問題・答えを出さない（印だけ）", /第\d+回/.test(share) && /🟢/.test(share) && !G.TE.some((t) => share.includes(t.name) || share.includes(t.lead)) && !/党|議席/.test(share), share);
@@ -236,6 +238,8 @@ try {
   check("おさらいで一度で正解すると、おさらいから外れる", !(await mem(p)).miss.includes(tags[0]));
   // しくみ帳：説明と出典、そのしくみだけで練習
   await p.goto(url); await p.waitForTimeout(150); await p.click("#go-dex");
+  { const dx = (await mem(p)).dex, want = Object.keys(G.CAT).map((c) => `${G.TE.filter((t) => t.cat === c && dx[t.id] > 0).length}/${G.TE.filter((t) => t.cat === c).length}`), got = await p.$$eval(".agrp .cnt", (e) => e.map((x) => x.textContent));
+    check("しくみ帳の分類ごとに、集めた数／全部の数を出す（記録と同じ数）", JSON.stringify(got) === JSON.stringify(want) && want.some((w) => !w.startsWith("0/")), got.join(",")); }
   const te = await p.getAttribute(".book button", "data-t");
   await p.click(".book button");
   check("しくみ帳を押すと、ひとこと・くわしく・出典（e-Gov か総務省のリンク）", /ひとことで/.test(await p.textContent("#tecard")) && (await p.textContent("#tecard")).includes("くわしく") && await p.locator("#tecard a[href*='e-gov.go.jp'], #tecard a[href*='soumu.go.jp']").count() >= 1);
@@ -261,12 +265,76 @@ try {
   {
     // 記録の形を直す：数の所の文字・壊れた途中経過・札を HTML として出さない
     const q = await newPage(); await closeHow(q);
-    await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("senkyo-v1")) || { v: 1 }; s.ebest = '<img id="xss" src=x>'; s.co = "x"; s.dex = { senkyoken: '"><b id="xss2">', zzz: 3 }; s.miss = ['"><i id="xss3">', "q:senkyoken"]; s.runs = { e: { mode: "e", id: "x", date: "2026-11-07", list: ['<b id="xss4">'], res: [] }, h: { list: "bad", res: [] }, d: { mode: "d", id: "z", date: "x", list: ["q:senkyoken"], res: [] }, p: { mode: "p", id: "y", date: "2026-11-07", list: ["q:senkyoken", "q:hi-shu"], res: [{ m: 0 }], cur: { i: 1, tag: "q:hi-shu", wrong: "x", hints: 0 } } }; s.days = { "2026-11-07": { m: "x" }, bad: { m: [0] }, "2026-02-30": { m: [0] } }; localStorage.setItem("senkyo-v1", JSON.stringify(s)); });
+    await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("senkyo-v1")) || { v: 1 }; s.ebest = '<img id="xss" src=x>'; s.co = "x"; s.dex = { senkyoken: '"><b id="xss2">', zzz: 3, "Bad Key": 1 }; s.miss = ['"><i id="xss3">', "q:senkyoken"]; s.runs = { e: { mode: "e", id: "x", date: "2026-11-07", list: ['<b id="xss4">'], res: [] }, h: { list: "bad", res: [] }, d: { mode: "d", id: "z", date: "x", list: ["q:senkyoken"], res: [] }, p: { mode: "p", id: "y", date: "2026-11-07", list: ["q:senkyoken", "q:hi-shu"], res: [{ m: 0 }], cur: { i: 1, tag: "q:hi-shu", wrong: "x", hints: 0 } } }; s.days = { "2026-11-07": { m: "x" }, bad: { m: [0] }, "2026-02-30": { m: [0] } }; localStorage.setItem("senkyo-v1", JSON.stringify(s)); });
     await q.reload(); await q.waitForTimeout(250);
     const st = await q.evaluate(() => __mb.load());
-    check("記録の形を直す：数の所の文字は0に・知らないしくみと壊れた途中経過・日ごとの記録は捨てる", st.ebest === 0 && st.co === 0 && st.dex.senkyoken === 0 && !("zzz" in st.dex) && JSON.stringify(st.miss) === '["q:senkyoken"]' && !("e" in st.runs) && !("h" in st.runs) && !("d" in st.runs) && st.runs.p && st.runs.p.cur === null && Object.keys(st.days).length === 0);
+    check("記録の形を直す：数の所の文字は0に・形のちがう id と壊れた途中経過・日ごとの記録は捨てる（新しい版の形の正しい id は残す）", st.ebest === 0 && st.co === 0 && st.dex.senkyoken === 0 && st.dex.zzz === 3 && !("Bad Key" in st.dex) && JSON.stringify(st.miss) === '["q:senkyoken"]' && !("e" in st.runs) && !("h" in st.runs) && !("d" in st.runs) && st.runs.p && st.runs.p.cur === null && Object.keys(st.days).length === 0);
     await q.click("#go-dex").catch(() => {}); await q.waitForTimeout(150);
     check("記録の文字を HTML として出さない", await q.locator("#xss, #xss2, #xss3, #xss4").count() === 0);
+    // 新しい版で足したしくみの札が入った日の記録も、古い版では消さずに残し、結果はその日の問題で出す
+    const dN = dayBefore(2), lN = [...G.dailyTags(dN).slice(0, 4), "q:mirai-shikumi"];
+    await q.evaluate(([d, l]) => { const s = __mb.load(); s.days[d] = { m: [0, 0, 0, 0, 0], l }; s.dex["mirai-shikumi"] = 2; localStorage.setItem(__mb.KEY, JSON.stringify(s)); }, [dN, lN]);
+    await q.reload(); await q.waitForTimeout(200);
+    const stN = await q.evaluate(() => __mb.load());
+    await q.evaluate((d) => __mb.result("d", d), dN); await q.waitForTimeout(100);
+    const wantT = G.dailyTags(dN).map((t) => G.make(t).title), gotT = await q.locator(".rlist .w b").allTextContents();
+    check("新しい版のしくみの札がある日の記録・しくみ帳の数を、古い版でも消さない（結果はその日の問題で出す）", JSON.stringify(stN.days[dN]?.l) === JSON.stringify(lN) && stN.dex["mirai-shikumi"] === 2 && JSON.stringify(gotT) === JSON.stringify(wantT), gotT.join("・"));
+    // 新しい版の札が入ったおさらい・途中経過も、古い版の保存で消さない。集めた数と「ぜんぶ集めた」には知らないしくみを数えない
+    const dex0 = await q.evaluate(() => __mb.load().dex), nk0 = G.TE.filter((t) => dex0[t.id] > 0).length; // zzz・mirai-shikumi は数えない
+    await q.evaluate(() => { const s = __mb.load(); s.miss = ["q:mirai-shikumi", "q:senkyoken"]; s.runs.p = { mode: "p", id: "fut", date: "2026-11-07", list: ["q:mirai-shikumi", "q:senkyoken"], res: [], cur: null }; localStorage.setItem(__mb.KEY, JSON.stringify(s)); });
+    await q.reload(); await q.waitForTimeout(200);
+    await q.evaluate(() => __mb.save(() => {}));
+    const stF = await q.evaluate(() => __mb.load()), dexBtn = await q.locator("#go-dex").textContent();
+    await q.click("#go-p"); await q.waitForTimeout(150);
+    const missBtn = (await q.locator('[data-c="miss"]').textContent().catch(() => "")) || ""; // おさらいのボタンは練習の画面にある。読める札だけを数える（1問）
+    check("新しい版の札のおさらい・途中経過を古い版の保存で消さず・集めた数に知らないしくみを入れない", JSON.stringify(stF.miss) === '["q:mirai-shikumi","q:senkyoken"]' && stF.runs.p?.id === "fut" && JSON.stringify(stF.runs.p.list) === '["q:mirai-shikumi","q:senkyoken"]' && missBtn.includes("（1問）") && dexBtn.includes(`${nk0}/${G.TE.length}`), `${dexBtn}・${missBtn}`);
+    // 新しい版の札がある日の結果：その日の問題で出し、1問ごとの星は付けずに知らせる
+    await q.evaluate((d) => __mb.result("d", d), dN); await q.waitForTimeout(100);
+    const altStars = await q.locator(".rlist > div > span:first-child").allTextContents();
+    check("新しい版の札がある日の結果は、別の問題に星を付けず「読み直すと出る」と知らせる", await q.locator("#altnote").count() === 1 && altStars.length === 5 && altStars.every((t) => t === "—"), altStars.join(""));
+    // 新しい版で終えたあとからの回（読めない札）は、古い版で「続き」を押しても上書きしない（あとからの日がある 11/17 に時計を合わせる）
+    {
+      const qa = await newPage(); await closeHow(qa);
+      await qa.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
+      const dA = "2026-11-14", futA = { mode: "a", date: dA, id: "a" + dA, list: [...G.dailyTags(dA).slice(0, 4), "q:mirai-shikumi"], res: [0, 1, 2, 0, 1].map((m) => ({ m })), cur: null };
+      await qa.evaluate(([d, r]) => { const s = __mb.load(); s.runs["a:" + d] = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); }, [dA, futA]);
+      const lateA = await qa.evaluate(() => __mb.lateDays(__mb.load()));
+      await qa.evaluate((d) => __mb.startRun("a", d), dA); await qa.waitForTimeout(150);
+      const sA = await qa.evaluate(() => __mb.load()), stA = sA.runs["a:" + dA], recA = sA.adays[dA]; // 上書きせず、そのまま残すか、その答えで記録する
+      check("新しい版で終えたあとからの回は、古い版で開き直しても上書きしない（答えのまま記録する）", lateA.includes(dA) && (stA ? JSON.stringify(stA.list) === JSON.stringify(futA.list) && JSON.stringify(stA.res) === JSON.stringify(futA.res) : JSON.stringify(recA?.m) === "[0,1,2,0,1]" && JSON.stringify(recA?.l) === JSON.stringify(futA.list)), lateA.join(",") + JSON.stringify(stA || recA));
+      await qa.context().close();
+    }
+    // 新しい版で終えて記録する前に閉じた今日の回（読めない札）：古い版で開いても先に記録し、翌日の今日の5問・あとからで上書き・二重記録しない
+    {
+      const qd = await newPage(); await closeHow(qd);
+      await qd.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
+      const dD = "2026-11-16", futD = { mode: "d", date: dD, id: "D1", list: [...G.dailyTags(dD).slice(0, 4), "q:mirai-shikumi"], res: [0, 1, 0, 2, 0].map((m) => ({ m })), cur: null };
+      await qd.evaluate((r) => { const s = __mb.load(); s.runs.d = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); }, futD);
+      await qd.reload(); await qd.waitForTimeout(250);
+      const stD = await qd.evaluate(() => __mb.load()), lateD = await qd.evaluate(() => __mb.lateDays(__mb.load()));
+      check("新しい版で終えた記録前の回は、古い版で開いても先に記録して結果を出す（翌日に上書きしない・あとからに出さない）", JSON.stringify(stD.days[dD]?.l) === JSON.stringify(futD.list) && JSON.stringify(stD.days[dD]?.m) === "[0,1,0,2,0]" && !stD.runs.d && !lateD.includes(dD) && await qd.locator("#altnote").count() === 1, JSON.stringify(stD.days[dD]));
+      await qd.context().close();
+    }
+    // 終えて記録前の前の日の回が残ったまま「今日の5問」を始めても、置きかえる前に記録する（ホームを開いたあとに別のタブで答えたとき）
+    {
+      const qb = await newPage(); await closeHow(qb);
+      await qb.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
+      const dB = "2026-11-16", lB = G.dailyTags(dB), runB = { mode: "d", date: dB, id: "B1", list: lB, res: [0, 0, 1, 0, 0].map((m) => ({ m })), cur: null };
+      await qb.evaluate((r) => { const s = __mb.load(); s.runs.d = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); __mb.startRun("d"); }, runB); await qb.waitForTimeout(150);
+      const stB = await qb.evaluate(() => __mb.load());
+      check("新しい回で置きかえる前に、終えて記録前の回を記録する", JSON.stringify(stB.days[dB]?.m) === "[0,0,1,0,0]" && JSON.stringify(stB.days[dB]?.l) === JSON.stringify(runB.list) && stB.runs.d?.date === "2026-11-17", JSON.stringify(stB.days[dB]));
+      await qb.context().close();
+    }
+    // 別のタブで終えて記録前のあとからの回：カレンダーからその日を押すと、結果へ進めて記録する
+    {
+      const qc = await newPage(); await closeHow(qc);
+      await qc.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
+      const dC = "2026-11-13", runC = { mode: "a", date: dC, id: "a" + dC, list: G.dailyTags(dC), res: [1, 0, 0, 0, 2].map((m) => ({ m })), cur: null };
+      await qc.evaluate(([d, r]) => { const s = __mb.load(); s.runs["a:" + d] = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); __mb.startRun("a", d); }, [dC, runC]); await qc.waitForTimeout(150);
+      const stC = await qc.evaluate(() => __mb.load()), resC = await qc.locator(".rlist > div").count();
+      check("終えて記録前のあとからの回は、上書きせず結果へ進めて記録する", JSON.stringify(stC.adays[dC]?.m) === "[1,0,0,0,2]" && JSON.stringify(stC.adays[dC]?.l) === JSON.stringify(runC.list) && !stC.runs["a:" + dC] && resC === 5, JSON.stringify(stC.adays[dC]) + resC);
+      await qc.context().close();
+    }
     await q.context().close();
   }
   {

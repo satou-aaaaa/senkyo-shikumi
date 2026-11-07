@@ -86,6 +86,11 @@ button.sub:disabled,button.main:disabled{opacity:.45;cursor:default}
 @keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 @keyframes up{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
 @keyframes stamp{0%{transform:scale(2.2) rotate(-18deg);opacity:0}60%{transform:scale(.92) rotate(-12deg);opacity:1}100%{transform:scale(1) rotate(-12deg)}}
+.msg:empty{min-height:0;margin-top:-14px}
+#hintbox:empty{display:none}
+.score{text-align:center;margin:0;font-weight:700;color:var(--ink2)}
+.score b{font-size:1.25rem;color:var(--ink)}
+.agrp .cnt{font-weight:700;color:var(--ink2);margin-left:.4rem;font-size:.85em}
 .msg{min-height:1.6rem;text-align:center;font-weight:700;font-size:.95rem;margin:0}
 .msg.bad{color:var(--shu2)}
 .verdict{position:relative;overflow:hidden;background:var(--paper);border:2px solid var(--ok);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 6px 0 #1d2b2620;animation:up .35s ease-out}
@@ -423,21 +428,25 @@ function load() {
 // 引き継ぎコードなどから入った値を正しい形に直す（数の所に文字が入っていても画面に出さない。壊れた途中経過は捨てる）
 const num = (v) => (Number.isFinite(+v) && +v >= 0 ? Math.floor(+v) : 0);
 const okDate = (v) => { if (typeof v !== "string" || !/^\d{4}-\d\d-\d\d$/.test(v)) return false; const t = Date.parse(v + "T00:00:00Z"); return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v; };
+const ID_RE = /^[a-z][a-z0-9-]{0,39}$/, TAG_RE = /^(q:[a-z][a-z0-9-]{0,39}|[dD]:(0|[1-9]\d{0,7}))$/; // 新しい版のしくみの札の形（中身は G.ok で確かめてから使う）
+const okTag = (t) => typeof t === "string" && TAG_RE.test(t), readable = (r) => !!r && Array.isArray(r.list) && r.list.every(G.ok);
 function tidy(s) {
   s.ebest = num(s.ebest); s.co = num(s.co);
   for (const q of OBJ) if (!s[q] || typeof s[q] !== "object" || Array.isArray(s[q])) s[q] = {};
-  s.miss = Array.isArray(s.miss) ? s.miss.filter(G.ok).slice(-12) : [];
+  // おさらい・途中経過の札も、形が正しければ新しい版の札のまま残す（読めるかは開くときに G.ok で見る。2026-11-07 CodeRabbit）
+  s.miss = Array.isArray(s.miss) ? s.miss.filter(okTag).slice(-12) : [];
   s.edone = Array.isArray(s.edone) ? s.edone.filter((x) => typeof x === "string").slice(-20) : [];
-  for (const k in s.dex) if (!G.BYTE[k]) delete s.dex[k]; else s.dex[k] = num(s.dex[k]);
+  // 知らないしくみの id も、形が正しければ残す（新しい版で足したしくみの記録を、古いタブの保存で消さない。2026-11-07 CodeRabbit）
+  for (const k in s.dex) if (!G.BYTE[k] && !ID_RE.test(k)) delete s.dex[k]; else s.dex[k] = num(s.dex[k]);
   // 今日の5問・あとからは5問、上級は3問の記録だけを残す（足りない記録で「全問正解」にしない）
-  const okRec = (x, n) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.length === n && x.m.every((v) => Number.isInteger(v) && v >= 0) && (x.l === undefined || (Array.isArray(x.l) && x.l.length === n && x.l.every(G.ok)));
+  const okRec = (x, n) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.length === n && x.m.every((v) => Number.isInteger(v) && v >= 0) && (x.l === undefined || (Array.isArray(x.l) && x.l.length === n && x.l.every((t) => typeof t === "string" && TAG_RE.test(t))));
   for (const [b, n] of [[s.days, 5], [s.hdays, 3], [s.adays, 5]]) for (const d in b) if (!okDate(d) || !okRec(b[d], n)) delete b[d];
   for (const m in s.runs) {
     const r = s.runs[m]; if (r === null) continue;
     // 置き場の名前とモードが合わない途中経過・終えたとことんの回は捨てる
     const want = /^[dhpe]$/.test(m) ? m : /^a:/.test(m) ? "a" : null;
     if (!r || typeof r !== "object" || r.mode !== want || (want === "a" && r.date !== m.slice(2)) || (want === "e" && s.edone.includes(r.id))) { delete s.runs[m]; continue; }
-    if (typeof r !== "object" || typeof r.id !== "string" || !okDate(r.date) || !Array.isArray(r.list) || !r.list.length || !r.list.every(G.ok) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
+    if (typeof r !== "object" || typeof r.id !== "string" || !okDate(r.date) || !Array.isArray(r.list) || !r.list.length || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
     if (r.cur != null && (typeof r.cur !== "object" || !Array.isArray(r.cur.wrong) || !r.cur.wrong.every((w) => Number.isInteger(w)))) r.cur = null; else if (r.cur) r.cur.hints = num(r.cur.hints);
     if (r.mode === "e") { r.first = num(r.first); r.miss = num(r.miss); }
   }
@@ -447,6 +456,8 @@ function tidy(s) {
 function save(fn) { const s = load(); fn(s); s.t = Math.max(Date.now(), (s.t || 0) + 1); const j = JSON.stringify(s); try { localStorage.setItem(KEY, j); mem = null; } catch (e) { mem = j; } return s; }
 function streak(days) { let k = todayKey(), n = 0; if (!days[k]) k = prevDay(k); while (days[k]) { n++; k = prevDay(k); } return n; }
 const playedDays = (s) => new Set([...Object.keys(s.days), ...Object.keys(s.adays)]).size;
+// 集めたしくみの数は、この版にあるしくみだけで数える（知らない id は残すが、数にも「ぜんぶ集めた」にも入れない）
+const nKinds = (s) => G.TE.filter((t) => s.dex[t.id] > 0).length;
 const seenAll = (s) => Object.values(s.dex).reduce((a, b) => a + (+b || 0), 0);
 // 取りこぼした日：今日より前の7日のうち、今日の5問もあとからも遊んでいない日（新しい順。第1回より前は無い）
 const LATE = 7;
@@ -456,7 +467,7 @@ function lateDays(s, k = todayKey()) { const out = []; let d = k; for (let i = 0
 function tally(s) {
   const dk = Object.values(s.days);
   return { days: Object.keys(s.days).length, played: playedDays(s), clean: dk.filter((r) => r.m.length && r.m.every((m) => m === 0)).length, hard: Object.keys(s.hdays).length,
-    late: Object.keys(s.adays).length, kinds: Object.keys(s.dex).filter((k) => s.dex[k] > 0).length, seen: seenAll(s), co: s.co || 0, ebest: s.ebest || 0 };
+    late: Object.keys(s.adays).length, kinds: nKinds(s), seen: seenAll(s), co: s.co || 0, ebest: s.ebest || 0 };
 }
 const ACH = [
   ["clean1", "全問正解", "今日の5問を、まちがいもヒントもなしで終える", 0, "clean", 1],
@@ -501,8 +512,8 @@ const help = () => `<div class="help"><b>もっと知りたいとき</b>：総�
 function home() {
   const s = load(), k = todayKey(), done = s.days[k], hdone = s.hdays[k];
   // 最後の1問を終えて結果を見る前に閉じた回は、開き直したら結果へ進める（記録をつける）
-  for (const m of Object.keys(s.runs)) { const r = s.runs[m]; if (m !== "p" && r && doneOf(r)) { MODE = m; return finish(); } }
-  const late = lateDays(s, k), ag = achGot(s).length, tip = tipOf(k), nk = Object.keys(s.dex).filter((x) => s.dex[x] > 0).length;
+  for (const m of Object.keys(s.runs)) { const r = s.runs[m]; if (m !== "p" && r && doneOf(r)) { MODE = m; return finish(); } } // 新しい版で終えた回（読めない札）も先に記録する（翌日に上書きされたり、同じ日をあとから二度記録したりしないように。結果は altnote で出す）
+  const late = lateDays(s, k), ag = achGot(s).length, tip = tipOf(k), nk = nKinds(s);
   const rd = s.runs.d && s.runs.d.date === k ? s.runs.d : null, rh = s.runs.h && s.runs.h.date === k ? s.runs.h : null, re = s.runs.e || null;
   const st = streak(s.days);
   app.innerHTML = `
@@ -534,20 +545,21 @@ function practiceMenu() {
   app.innerHTML = `<header><button class="icon" id="back" aria-label="もどる">←</button><h1>練習<small>今日の記録には入りません（しくみ帳には載ります）</small></h1></header>
     <p class="note">選ぶと5問出ます。何度でも遊べます。</p>
     <div class="lv">${CATS.map((c) => `<button class="sub" data-c="${c[0]}" style="min-height:64px;flex-direction:column;gap:0"><span>${c[1]}</span><small style="font-weight:500;color:var(--ink2)">${c[2]}</small></button>`).join("")}
-    ${s.miss.length ? `<button class="sub" data-c="miss" style="min-height:64px">おさらい：まちがえた問題（${s.miss.length}問）</button>` : ""}</div>
+    ${s.miss.filter(G.ok).length ? `<button class="sub" data-c="miss" style="min-height:64px">おさらい：まちがえた問題（${s.miss.filter(G.ok).length}問）</button>` : ""}</div>
     <p class="note">しくみ帳のしくみを押すと、そのしくみだけで練習できます。</p>${footer()}`;
   $("back").onclick = home;
   document.querySelectorAll(".lv button").forEach((b) => (b.onclick = () => startRun("p", b.dataset.c)));
   bindFooter(); toTop();
 }
 function startRun(mode, opt) {
-  const k = todayKey(); let ng = false;
+  const k = todayKey(); let ng = false, fin = false;
   save((s) => {
     // あとから：取りこぼした日（過去7日・まだ遊んでいない）だけ。その日の今日の5問と同じ問題。途中経過は日付ごとに runs["a:日付"]
     if (mode === "a") {
       const ra = s.runs[runKey("a", opt)];
       if (!lateDays(s, k).includes(opt)) { ng = true; return; } // 期限は続きからより先に確かめる
-      if (ra && ra.date === opt && !doneOf(ra)) return;
+      if (ra && ra.date === opt && (!doneOf(ra) || !readable(ra))) return; // 新しい版で終えた回（読めない札）も上書きしない
+      if (ra && ra.date === opt && doneOf(ra)) { fin = true; return; } // 別のタブで終えて記録前の回は、上書きせず結果へ進めて記録する（finish）
       s.runs[runKey("a", opt)] = { mode, date: opt, list: G.dailyTags(opt), res: [], cur: null, id: "a" + opt, a0: achGot(s) };
       return;
     }
@@ -556,11 +568,13 @@ function startRun(mode, opt) {
     if ((mode === "d" && s.days[k]) || (mode === "h" && s.hdays[k])) return; // 別のタブで今日の分を終えていたら、もう一度は始めない
     let list;
     if (mode === "d" || mode === "h") list = listOf(mode, k);
-    else if (opt === "miss") list = s.miss.slice(-5);
+    else if (opt === "miss") list = s.miss.filter(G.ok).slice(-5);
     else list = practiceList(opt);
     if (!list.length) { ng = true; return; }
+    if (s.runs[mode]) bank(s, s.runs[mode]); // 新しい回で置きかえる前に、終えて記録前の回を記録する（別のタブで前の日の最後の問題に答え、結果を見る前にこちらで始めたとき）
     s.runs[mode] = { mode, date: k, list, res: [], cur: null, id: rid(), a0: achGot(s), rev: opt === "miss" };
   });
+  if (fin) { MODE = runKey("a", opt); return finish(); }
   if (ng) return mode === "a" ? cal() : home();
   MODE = runKey(mode, opt);
   play();
@@ -578,6 +592,7 @@ const dayStr = (d) => `${+d.slice(5, 7)}月${+d.slice(8, 10)}日（${WD[new Date
 function play() {
   const s = load(), run = s.runs[MODE];
   if (!run) return home();
+  if (!readable(run)) { toast("新しい版で始めた回です。ページを読み直すと続きから遊べます"); return home(); }
   const i = run.res.length;
   if (run.mode === "e" && i >= run.list.length - 2) { save((s2) => { const r = s2.runs.e; if (r && r.id === run.id && r.res.length === i) r.list = r.list.concat(endlessList(r.list[r.list.length - 1])); }); return play(); }
   if (i >= run.list.length) return finish();
@@ -618,7 +633,7 @@ const cutOf = () => { if (cur.hints < 2) return []; const left = cur.P.opts.map(
 function paint() {
   const cut = cutOf();
   document.querySelectorAll(".ch").forEach((b) => { const j = +b.dataset.j, ng = cur.wrong.includes(j) || cut.includes(j); b.classList.toggle("ng", ng); b.disabled = ng || cur.done; b.setAttribute("aria-label", cur.P.opts[j] + (ng ? "（ちがう）" : "")); });
-  const h = $("hint"); if (h) h.disabled = cur.done || cur.hints >= hmax();
+  const h = $("hint"); if (h) { h.disabled = cur.done || cur.hints >= hmax(); h.hidden = cur.done; } // 答えたあとは押せないボタンを出さない
   $("hintbox").innerHTML = cur.hints && !cur.done ? `<div class="hint" role="status">💡 ${esc(cur.P.look)}${cur.hints >= 2 ? "<br>💡 ちがう選び肢を1つ消しました。" : ""}</div>` : "";
 }
 function hint() { if (cur.done || cur.hints >= hmax()) return; if (!same(load().runs[MODE])) { toast("別の画面で先に進んでいます"); return play(); } cur.hints++; keep(); paint(); }
@@ -650,7 +665,7 @@ function choose(j) {
   });
   const st = starsOf(m), r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length;
   document.querySelectorAll(".ch").forEach((b) => { b.disabled = true; if (+b.dataset.j === P.ans) { b.classList.add("ok"); b.setAttribute("aria-label", P.opts[P.ans] + "（正解）"); } });
-  if ($("hint")) $("hint").disabled = true;
+  if ($("hint")) { $("hint").disabled = true; $("hint").hidden = true; }
   $("hintbox").innerHTML = ""; $("msg").className = "msg"; $("msg").textContent = "";
   const te = P.te ? G.BYTE[P.te] : null;
   $("after").innerHTML = `<div class="verdict" role="status">
@@ -708,16 +723,19 @@ function untilNext() { const n = jstNow(), ms = 864e5 - (n.getTime() % 864e5); r
 function result(mode, k, first, prec, newAch = []) {
   const s = load(), rec = mode === "p" ? prec : bookOf(s, mode)[k];
   if (!rec) return home();
-  const list = mode === "p" ? prec.list : Array.isArray(rec.l) && rec.l.length === rec.m.length ? rec.l : listOf(mode, k), total = rec.m.reduce((a, b) => a + b, 0), late = mode === "a", text = shareText(mode, k, rec);
+  const alt = mode !== "p" && Array.isArray(rec.l) && !(rec.l.length === rec.m.length && rec.l.every(G.ok)); // 新しい版の札：その日の問題で出し、1問ごとの星は付けない
+  const list = mode === "p" ? prec.list : !alt && Array.isArray(rec.l) ? rec.l : listOf(mode, k), total = rec.m.reduce((a, b) => a + b, 0), late = mode === "a", text = shareText(mode, k, rec);
   const showKofi = first && mode !== "p" && !late && total === 0 && !s.kofi[k + mode]; // あとから・練習・まちがいのある日には出さない
   if (showKofi) save((s2) => { s2.kofi[k + mode] = 1; });
   app.innerHTML = `
     <header><button class="icon" id="back" aria-label="ホームへ">←</button><h1>選挙のしくみ<small>${mode === "d" ? `今日の5問 第${dayNo(k)}回` : late ? `第${dayNo(k)}回 あとから` : mode === "h" ? "上級" : "練習"}</small></h1></header>
     <p class="big">${total === 0 ? "全問正解！" : `${list.length}問 答えました`}</p>
+    <p class="score" id="score" data-a11y-say>星 <b>${rec.m.reduce((a, m) => a + starsOf(m), 0)}</b> / ${rec.m.length * 3}　・　一度で正解 <b>${rec.m.filter((m) => m === 0).length}</b> / ${rec.m.length}</p>
     ${newAch.length ? `<p class="achnew" id="achnew">${newAch.map((id) => `🏅 実績：${ACH.find((a) => a[0] === id)[1]}`).join("<br>")}</p>` : ""}
     ${(() => { const nx = nextAch(s); return nx ? `<p class="achnext" id="achnext">🎯 あと${nx.left}${nx.unit}で「${nx.name}」</p>` : ""; })()}
     <p class="agrp">今日覚えたこと</p>
-    <div class="rlist">${list.map((tag, j) => { const P = G.make(tag); return `<div><span>${starStr(starsOf(rec.m[j]))}</span><span class="w"><b>${esc(P.title)}</b>${esc(P.why)}</span></div>`; }).join("")}</div>
+    ${alt ? `<p class="note" id="altnote">新しい版で解いた問題があります。ページを読み直すと、その問題と星が出ます。</p>` : ""}
+    <div class="rlist">${list.map((tag, j) => { const P = G.make(tag); return `<div><span>${alt ? "—" : starStr(starsOf(rec.m[j]))}</span><span class="w"><b>${esc(P.title)}</b>${esc(P.why)}</span></div>`; }).join("")}</div>
     ${late ? `<p class="note">あとから遊んだ日は、カレンダーに ↺ で残ります（続けた日には数えません）。</p><button class="main alt" id="go-cal">カレンダーへ</button>` : ""}
     ${mode !== "p" && !late ? `<div class="share">${esc(text)}</div>
     <button class="main" id="share">結果をシェア</button>
@@ -750,7 +768,7 @@ function book() {
   app.innerHTML = `
     <header><button class="icon" id="back" aria-label="ホームへ">←</button><h1>しくみ帳<small>${n}/${G.TE.length}</small></h1></header>
     <p class="note">正解したしくみが集まります。押すと、決まりと出典が読めます。</p>
-    ${Object.keys(G.CAT).map((c) => `<p class="agrp">${G.CAT[c][0]} ${esc(G.CAT[c][1])}</p><div class="book">${G.TE.filter((t) => t.cat === c).map((t) => s.dex[t.id] > 0 ? `<button data-t="${t.id}"><span class="mk" aria-hidden="true">${t.icon}</span><span>${esc(t.name)}</span><span class="ct">${s.dex[t.id]}回</span></button>` : `<span class="none" role="img" aria-label="まだ集めていないしくみ">？</span>`).join("")}</div>`).join("")}
+    ${Object.keys(G.CAT).map((c) => `<p class="agrp" data-a11y-say>${G.CAT[c][0]} ${esc(G.CAT[c][1])}<span class="cnt">${G.TE.filter((t) => t.cat === c && s.dex[t.id] > 0).length}/${G.TE.filter((t) => t.cat === c).length}</span></p><div class="book">${G.TE.filter((t) => t.cat === c).map((t) => s.dex[t.id] > 0 ? `<button data-t="${t.id}"><span class="mk" aria-hidden="true">${t.icon}</span><span>${esc(t.name)}</span><span class="ct">${s.dex[t.id]}回</span></button>` : `<span class="none" role="img" aria-label="まだ集めていないしくみ">？</span>`).join("")}</div>`).join("")}
     ${footer()}`;
   $("back").onclick = home;
   document.querySelectorAll(".book button").forEach((b) => (b.onclick = () => teView(b.dataset.t)));
@@ -826,7 +844,7 @@ function about() {
   $("back").onclick = home; bindFooter(); toTop();
 }
 
-window.__mb = { mode: () => MODE, load, save, todayKey, dayNo, lateDays, ACH, achGot, nextAch, tally, shareText, streak, endlessList, practiceList, cur: () => cur, play: (m) => { if (m) MODE = m; play(); }, home, cal, book, about, EPOCH, KEY, G };
+window.__mb = { mode: () => MODE, result, startRun, load, save, todayKey, dayNo, lateDays, ACH, achGot, nextAch, tally, shareText, streak, endlessList, practiceList, cur: () => cur, play: (m) => { if (m) MODE = m; play(); }, home, cal, book, about, EPOCH, KEY, G };
 home();
 if ("serviceWorker" in navigator && location.protocol === "https:" && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
