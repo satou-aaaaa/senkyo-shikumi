@@ -428,14 +428,16 @@ function load() {
 // 引き継ぎコードなどから入った値を正しい形に直す（数の所に文字が入っていても画面に出さない。壊れた途中経過は捨てる）
 const num = (v) => (Number.isFinite(+v) && +v >= 0 ? Math.floor(+v) : 0);
 const okDate = (v) => { if (typeof v !== "string" || !/^\d{4}-\d\d-\d\d$/.test(v)) return false; const t = Date.parse(v + "T00:00:00Z"); return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v; };
+const ID_RE = /^[a-z][a-z0-9-]{0,39}$/, TAG_RE = /^(q:[a-z][a-z0-9-]{0,39}|[dD]:(0|[1-9]\d{0,7}))$/; // 新しい版のしくみの札の形（中身は G.ok で確かめてから使う）
 function tidy(s) {
   s.ebest = num(s.ebest); s.co = num(s.co);
   for (const q of OBJ) if (!s[q] || typeof s[q] !== "object" || Array.isArray(s[q])) s[q] = {};
   s.miss = Array.isArray(s.miss) ? s.miss.filter(G.ok).slice(-12) : [];
   s.edone = Array.isArray(s.edone) ? s.edone.filter((x) => typeof x === "string").slice(-20) : [];
-  for (const k in s.dex) if (!G.BYTE[k]) delete s.dex[k]; else s.dex[k] = num(s.dex[k]);
+  // 知らないしくみの id も、形が正しければ残す（新しい版で足したしくみの記録を、古いタブの保存で消さない。2026-11-07 CodeRabbit）
+  for (const k in s.dex) if (!G.BYTE[k] && !ID_RE.test(k)) delete s.dex[k]; else s.dex[k] = num(s.dex[k]);
   // 今日の5問・あとからは5問、上級は3問の記録だけを残す（足りない記録で「全問正解」にしない）
-  const okRec = (x, n) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.length === n && x.m.every((v) => Number.isInteger(v) && v >= 0) && (x.l === undefined || (Array.isArray(x.l) && x.l.length === n && x.l.every(G.ok)));
+  const okRec = (x, n) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.length === n && x.m.every((v) => Number.isInteger(v) && v >= 0) && (x.l === undefined || (Array.isArray(x.l) && x.l.length === n && x.l.every((t) => typeof t === "string" && TAG_RE.test(t))));
   for (const [b, n] of [[s.days, 5], [s.hdays, 3], [s.adays, 5]]) for (const d in b) if (!okDate(d) || !okRec(b[d], n)) delete b[d];
   for (const m in s.runs) {
     const r = s.runs[m]; if (r === null) continue;
@@ -713,13 +715,13 @@ function untilNext() { const n = jstNow(), ms = 864e5 - (n.getTime() % 864e5); r
 function result(mode, k, first, prec, newAch = []) {
   const s = load(), rec = mode === "p" ? prec : bookOf(s, mode)[k];
   if (!rec) return home();
-  const list = mode === "p" ? prec.list : Array.isArray(rec.l) && rec.l.length === rec.m.length ? rec.l : listOf(mode, k), total = rec.m.reduce((a, b) => a + b, 0), late = mode === "a", text = shareText(mode, k, rec);
+  const list = mode === "p" ? prec.list : Array.isArray(rec.l) && rec.l.length === rec.m.length && rec.l.every(G.ok) ? rec.l : listOf(mode, k), total = rec.m.reduce((a, b) => a + b, 0), late = mode === "a", text = shareText(mode, k, rec);
   const showKofi = first && mode !== "p" && !late && total === 0 && !s.kofi[k + mode]; // あとから・練習・まちがいのある日には出さない
   if (showKofi) save((s2) => { s2.kofi[k + mode] = 1; });
   app.innerHTML = `
     <header><button class="icon" id="back" aria-label="ホームへ">←</button><h1>選挙のしくみ<small>${mode === "d" ? `今日の5問 第${dayNo(k)}回` : late ? `第${dayNo(k)}回 あとから` : mode === "h" ? "上級" : "練習"}</small></h1></header>
     <p class="big">${total === 0 ? "全問正解！" : `${list.length}問 答えました`}</p>
-    <p class="score" id="score">星 <b>${rec.m.reduce((a, m) => a + starsOf(m), 0)}</b> / ${rec.m.length * 3}　・　一度で正解 <b>${rec.m.filter((m) => m === 0).length}</b> / ${rec.m.length}</p>
+    <p class="score" id="score" data-a11y-say>星 <b>${rec.m.reduce((a, m) => a + starsOf(m), 0)}</b> / ${rec.m.length * 3}　・　一度で正解 <b>${rec.m.filter((m) => m === 0).length}</b> / ${rec.m.length}</p>
     ${newAch.length ? `<p class="achnew" id="achnew">${newAch.map((id) => `🏅 実績：${ACH.find((a) => a[0] === id)[1]}`).join("<br>")}</p>` : ""}
     ${(() => { const nx = nextAch(s); return nx ? `<p class="achnext" id="achnext">🎯 あと${nx.left}${nx.unit}で「${nx.name}」</p>` : ""; })()}
     <p class="agrp">今日覚えたこと</p>
@@ -756,7 +758,7 @@ function book() {
   app.innerHTML = `
     <header><button class="icon" id="back" aria-label="ホームへ">←</button><h1>しくみ帳<small>${n}/${G.TE.length}</small></h1></header>
     <p class="note">正解したしくみが集まります。押すと、決まりと出典が読めます。</p>
-    ${Object.keys(G.CAT).map((c) => `<p class="agrp">${G.CAT[c][0]} ${esc(G.CAT[c][1])}<span class="cnt">${G.TE.filter((t) => t.cat === c && s.dex[t.id] > 0).length}/${G.TE.filter((t) => t.cat === c).length}</span></p><div class="book">${G.TE.filter((t) => t.cat === c).map((t) => s.dex[t.id] > 0 ? `<button data-t="${t.id}"><span class="mk" aria-hidden="true">${t.icon}</span><span>${esc(t.name)}</span><span class="ct">${s.dex[t.id]}回</span></button>` : `<span class="none" role="img" aria-label="まだ集めていないしくみ">？</span>`).join("")}</div>`).join("")}
+    ${Object.keys(G.CAT).map((c) => `<p class="agrp" data-a11y-say>${G.CAT[c][0]} ${esc(G.CAT[c][1])}<span class="cnt">${G.TE.filter((t) => t.cat === c && s.dex[t.id] > 0).length}/${G.TE.filter((t) => t.cat === c).length}</span></p><div class="book">${G.TE.filter((t) => t.cat === c).map((t) => s.dex[t.id] > 0 ? `<button data-t="${t.id}"><span class="mk" aria-hidden="true">${t.icon}</span><span>${esc(t.name)}</span><span class="ct">${s.dex[t.id]}回</span></button>` : `<span class="none" role="img" aria-label="まだ集めていないしくみ">？</span>`).join("")}</div>`).join("")}
     ${footer()}`;
   $("back").onclick = home;
   document.querySelectorAll(".book button").forEach((b) => (b.onclick = () => teView(b.dataset.t)));
@@ -832,7 +834,7 @@ function about() {
   $("back").onclick = home; bindFooter(); toTop();
 }
 
-window.__mb = { mode: () => MODE, load, save, todayKey, dayNo, lateDays, ACH, achGot, nextAch, tally, shareText, streak, endlessList, practiceList, cur: () => cur, play: (m) => { if (m) MODE = m; play(); }, home, cal, book, about, EPOCH, KEY, G };
+window.__mb = { mode: () => MODE, result, load, save, todayKey, dayNo, lateDays, ACH, achGot, nextAch, tally, shareText, streak, endlessList, practiceList, cur: () => cur, play: (m) => { if (m) MODE = m; play(); }, home, cal, book, about, EPOCH, KEY, G };
 home();
 if ("serviceWorker" in navigator && location.protocol === "https:" && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
