@@ -281,11 +281,13 @@ try {
     check("新しい版のしくみの札がある日の記録・しくみ帳の数を、古い版でも消さない（結果はその日の問題で出す）", JSON.stringify(stN.days[dN]?.l) === JSON.stringify(lN) && stN.dex["mirai-shikumi"] === 2 && JSON.stringify(gotT) === JSON.stringify(wantT), gotT.join("・"));
     // 新しい版の札が入ったおさらい・途中経過も、古い版の保存で消さない。集めた数と「ぜんぶ集めた」には知らないしくみを数えない
     const dex0 = await q.evaluate(() => __mb.load().dex), nk0 = G.TE.filter((t) => dex0[t.id] > 0).length; // zzz・mirai-shikumi は数えない
-    await q.evaluate(() => { const s = __mb.load(); s.miss = ["q:mirai-shikumi"]; s.runs.p = { mode: "p", id: "fut", date: "2026-11-07", list: ["q:mirai-shikumi", "q:senkyoken"], res: [], cur: null }; localStorage.setItem(__mb.KEY, JSON.stringify(s)); });
+    await q.evaluate(() => { const s = __mb.load(); s.miss = ["q:mirai-shikumi", "q:senkyoken"]; s.runs.p = { mode: "p", id: "fut", date: "2026-11-07", list: ["q:mirai-shikumi", "q:senkyoken"], res: [], cur: null }; localStorage.setItem(__mb.KEY, JSON.stringify(s)); });
     await q.reload(); await q.waitForTimeout(200);
     await q.evaluate(() => __mb.save(() => {}));
-    const stF = await q.evaluate(() => __mb.load()), dexBtn = await q.locator("#go-dex").textContent(), missBtn = await q.locator('[data-c="miss"]').count();
-    check("新しい版の札のおさらい・途中経過を古い版の保存で消さず・集めた数に知らないしくみを入れない", JSON.stringify(stF.miss) === '["q:mirai-shikumi"]' && stF.runs.p?.id === "fut" && missBtn === 0 && dexBtn.includes(`${nk0}/${G.TE.length}`), dexBtn);
+    const stF = await q.evaluate(() => __mb.load()), dexBtn = await q.locator("#go-dex").textContent();
+    await q.click("#go-p"); await q.waitForTimeout(150);
+    const missBtn = (await q.locator('[data-c="miss"]').textContent().catch(() => "")) || ""; // おさらいのボタンは練習の画面にある。読める札だけを数える（1問）
+    check("新しい版の札のおさらい・途中経過を古い版の保存で消さず・集めた数に知らないしくみを入れない", JSON.stringify(stF.miss) === '["q:mirai-shikumi","q:senkyoken"]' && stF.runs.p?.id === "fut" && JSON.stringify(stF.runs.p.list) === '["q:mirai-shikumi","q:senkyoken"]' && missBtn.includes("（1問）") && dexBtn.includes(`${nk0}/${G.TE.length}`), `${dexBtn}・${missBtn}`);
     await q.context().close();
   }
   {
