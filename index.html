@@ -512,7 +512,7 @@ const help = () => `<div class="help"><b>もっと知りたいとき</b>：総�
 function home() {
   const s = load(), k = todayKey(), done = s.days[k], hdone = s.hdays[k];
   // 最後の1問を終えて結果を見る前に閉じた回は、開き直したら結果へ進める（記録をつける）
-  for (const m of Object.keys(s.runs)) { const r = s.runs[m]; if (m !== "p" && r && readable(r) && doneOf(r)) { MODE = m; return finish(); } }
+  for (const m of Object.keys(s.runs)) { const r = s.runs[m]; if (m !== "p" && r && doneOf(r)) { MODE = m; return finish(); } } // 新しい版で終えた回（読めない札）も先に記録する（翌日に上書きされたり、同じ日をあとから二度記録したりしないように。結果は altnote で出す）
   const late = lateDays(s, k), ag = achGot(s).length, tip = tipOf(k), nk = nKinds(s);
   const rd = s.runs.d && s.runs.d.date === k ? s.runs.d : null, rh = s.runs.h && s.runs.h.date === k ? s.runs.h : null, re = s.runs.e || null;
   const st = streak(s.days);

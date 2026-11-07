@@ -296,13 +296,24 @@ try {
     {
       const qa = await newPage(); await closeHow(qa);
       await qa.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
-      const dA = "2026-11-14", futA = { mode: "a", date: dA, id: "a" + dA, list: [...G.dailyTags(dA).slice(0, 4), "q:mirai-shikumi"], res: [0, 0, 0, 0, 0].map((m) => ({ m })), cur: null };
+      const dA = "2026-11-14", futA = { mode: "a", date: dA, id: "a" + dA, list: [...G.dailyTags(dA).slice(0, 4), "q:mirai-shikumi"], res: [0, 1, 2, 0, 1].map((m) => ({ m })), cur: null };
       await qa.evaluate(([d, r]) => { const s = __mb.load(); s.runs["a:" + d] = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); }, [dA, futA]);
       const lateA = await qa.evaluate(() => __mb.lateDays(__mb.load()));
       await qa.evaluate((d) => __mb.startRun("a", d), dA); await qa.waitForTimeout(150);
-      const stA = await qa.evaluate((d) => __mb.load().runs["a:" + d], dA);
-      check("新しい版で終えたあとからの回は、古い版で開き直しても上書きしない", lateA.includes(dA) && JSON.stringify(stA?.list) === JSON.stringify(futA.list) && stA?.res?.length === 5, lateA.join(","));
+      const sA = await qa.evaluate(() => __mb.load()), stA = sA.runs["a:" + dA], recA = sA.adays[dA]; // 上書きせず、そのまま残すか、その答えで記録する
+      check("新しい版で終えたあとからの回は、古い版で開き直しても上書きしない（答えのまま記録する）", lateA.includes(dA) && (stA ? JSON.stringify(stA.list) === JSON.stringify(futA.list) && JSON.stringify(stA.res) === JSON.stringify(futA.res) : JSON.stringify(recA?.m) === "[0,1,2,0,1]" && JSON.stringify(recA?.l) === JSON.stringify(futA.list)), lateA.join(",") + JSON.stringify(stA || recA));
       await qa.context().close();
+    }
+    // 新しい版で終えて記録する前に閉じた今日の回（読めない札）：古い版で開いても先に記録し、翌日の今日の5問・あとからで上書き・二重記録しない
+    {
+      const qd = await newPage(); await closeHow(qd);
+      await qd.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
+      const dD = "2026-11-16", futD = { mode: "d", date: dD, id: "D1", list: [...G.dailyTags(dD).slice(0, 4), "q:mirai-shikumi"], res: [0, 1, 0, 2, 0].map((m) => ({ m })), cur: null };
+      await qd.evaluate((r) => { const s = __mb.load(); s.runs.d = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); }, futD);
+      await qd.reload(); await qd.waitForTimeout(250);
+      const stD = await qd.evaluate(() => __mb.load()), lateD = await qd.evaluate(() => __mb.lateDays(__mb.load()));
+      check("新しい版で終えた記録前の回は、古い版で開いても先に記録して結果を出す（翌日に上書きしない・あとからに出さない）", JSON.stringify(stD.days[dD]?.l) === JSON.stringify(futD.list) && JSON.stringify(stD.days[dD]?.m) === "[0,1,0,2,0]" && !stD.runs.d && !lateD.includes(dD) && await qd.locator("#altnote").count() === 1, JSON.stringify(stD.days[dD]));
+      await qd.context().close();
     }
     await q.context().close();
   }
