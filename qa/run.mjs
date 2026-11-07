@@ -277,7 +277,15 @@ try {
     await q.reload(); await q.waitForTimeout(200);
     const stN = await q.evaluate(() => __mb.load());
     await q.evaluate((d) => __mb.result("d", d), dN); await q.waitForTimeout(100);
-    check("新しい版のしくみの札がある日の記録・しくみ帳の数を、古い版でも消さない（結果はその日の問題で出す）", JSON.stringify(stN.days[dN]?.l) === JSON.stringify(lN) && stN.dex["mirai-shikumi"] === 2 && await q.locator(".rlist > div").count() === 5);
+    const wantT = G.dailyTags(dN).map((t) => G.make(t).title), gotT = await q.locator(".rlist .w b").allTextContents();
+    check("新しい版のしくみの札がある日の記録・しくみ帳の数を、古い版でも消さない（結果はその日の問題で出す）", JSON.stringify(stN.days[dN]?.l) === JSON.stringify(lN) && stN.dex["mirai-shikumi"] === 2 && JSON.stringify(gotT) === JSON.stringify(wantT), gotT.join("・"));
+    // 新しい版の札が入ったおさらい・途中経過も、古い版の保存で消さない。集めた数と「ぜんぶ集めた」には知らないしくみを数えない
+    const dex0 = await q.evaluate(() => __mb.load().dex), nk0 = G.TE.filter((t) => dex0[t.id] > 0).length; // zzz・mirai-shikumi は数えない
+    await q.evaluate(() => { const s = __mb.load(); s.miss = ["q:mirai-shikumi"]; s.runs.p = { mode: "p", id: "fut", date: "2026-11-07", list: ["q:mirai-shikumi", "q:senkyoken"], res: [], cur: null }; localStorage.setItem(__mb.KEY, JSON.stringify(s)); });
+    await q.reload(); await q.waitForTimeout(200);
+    await q.evaluate(() => __mb.save(() => {}));
+    const stF = await q.evaluate(() => __mb.load()), dexBtn = await q.locator("#go-dex").textContent(), missBtn = await q.locator('[data-c="miss"]').count();
+    check("新しい版の札のおさらい・途中経過を古い版の保存で消さず・集めた数に知らないしくみを入れない", JSON.stringify(stF.miss) === '["q:mirai-shikumi"]' && stF.runs.p?.id === "fut" && missBtn === 0 && dexBtn.includes(`${nk0}/${G.TE.length}`), dexBtn);
     await q.context().close();
   }
   {
