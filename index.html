@@ -552,14 +552,14 @@ function practiceMenu() {
   bindFooter(); toTop();
 }
 function startRun(mode, opt) {
-  const k = todayKey(); let ng = false;
+  const k = todayKey(); let ng = false, fin = false;
   save((s) => {
     // あとから：取りこぼした日（過去7日・まだ遊んでいない）だけ。その日の今日の5問と同じ問題。途中経過は日付ごとに runs["a:日付"]
     if (mode === "a") {
       const ra = s.runs[runKey("a", opt)];
       if (!lateDays(s, k).includes(opt)) { ng = true; return; } // 期限は続きからより先に確かめる
       if (ra && ra.date === opt && (!doneOf(ra) || !readable(ra))) return; // 新しい版で終えた回（読めない札）も上書きしない
-      if (ra && bank(s, ra)) { s.runs[runKey("a", opt)] = null; ng = true; return; } // 別のタブで終えて記録前の回は、上書きせず先に記録する
+      if (ra && ra.date === opt && doneOf(ra)) { fin = true; return; } // 別のタブで終えて記録前の回は、上書きせず結果へ進めて記録する（finish）
       s.runs[runKey("a", opt)] = { mode, date: opt, list: G.dailyTags(opt), res: [], cur: null, id: "a" + opt, a0: achGot(s) };
       return;
     }
@@ -574,6 +574,7 @@ function startRun(mode, opt) {
     if (s.runs[mode]) bank(s, s.runs[mode]); // 新しい回で置きかえる前に、終えて記録前の回を記録する（別のタブで前の日の最後の問題に答え、結果を見る前にこちらで始めたとき）
     s.runs[mode] = { mode, date: k, list, res: [], cur: null, id: rid(), a0: achGot(s), rev: opt === "miss" };
   });
+  if (fin) { MODE = runKey("a", opt); return finish(); }
   if (ng) return mode === "a" ? cal() : home();
   MODE = runKey(mode, opt);
   play();

@@ -322,8 +322,18 @@ try {
       const dB = "2026-11-16", lB = G.dailyTags(dB), runB = { mode: "d", date: dB, id: "B1", list: lB, res: [0, 0, 1, 0, 0].map((m) => ({ m })), cur: null };
       await qb.evaluate((r) => { const s = __mb.load(); s.runs.d = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); __mb.startRun("d"); }, runB); await qb.waitForTimeout(150);
       const stB = await qb.evaluate(() => __mb.load());
-      check("新しい回で置きかえる前に、終えて記録前の回を記録する", JSON.stringify(stB.days[dB]?.m) === "[0,0,1,0,0]" && stB.runs.d?.date === "2026-11-17", JSON.stringify(stB.days[dB]));
+      check("新しい回で置きかえる前に、終えて記録前の回を記録する", JSON.stringify(stB.days[dB]?.m) === "[0,0,1,0,0]" && JSON.stringify(stB.days[dB]?.l) === JSON.stringify(runB.list) && stB.runs.d?.date === "2026-11-17", JSON.stringify(stB.days[dB]));
       await qb.context().close();
+    }
+    // 別のタブで終えて記録前のあとからの回：カレンダーからその日を押すと、結果へ進めて記録する
+    {
+      const qc = await newPage(); await closeHow(qc);
+      await qc.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
+      const dC = "2026-11-13", runC = { mode: "a", date: dC, id: "a" + dC, list: G.dailyTags(dC), res: [1, 0, 0, 0, 2].map((m) => ({ m })), cur: null };
+      await qc.evaluate(([d, r]) => { const s = __mb.load(); s.runs["a:" + d] = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); __mb.startRun("a", d); }, [dC, runC]); await qc.waitForTimeout(150);
+      const stC = await qc.evaluate(() => __mb.load()), resC = await qc.locator(".rlist > div").count();
+      check("終えて記録前のあとからの回は、上書きせず結果へ進めて記録する", JSON.stringify(stC.adays[dC]?.m) === "[1,0,0,0,2]" && JSON.stringify(stC.adays[dC]?.l) === JSON.stringify(runC.list) && !stC.runs["a:" + dC] && resC === 5, JSON.stringify(stC.adays[dC]) + resC);
+      await qc.context().close();
     }
     await q.context().close();
   }
