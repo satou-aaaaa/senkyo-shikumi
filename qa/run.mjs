@@ -288,6 +288,22 @@ try {
     await q.click("#go-p"); await q.waitForTimeout(150);
     const missBtn = (await q.locator('[data-c="miss"]').textContent().catch(() => "")) || ""; // おさらいのボタンは練習の画面にある。読める札だけを数える（1問）
     check("新しい版の札のおさらい・途中経過を古い版の保存で消さず・集めた数に知らないしくみを入れない", JSON.stringify(stF.miss) === '["q:mirai-shikumi","q:senkyoken"]' && stF.runs.p?.id === "fut" && JSON.stringify(stF.runs.p.list) === '["q:mirai-shikumi","q:senkyoken"]' && missBtn.includes("（1問）") && dexBtn.includes(`${nk0}/${G.TE.length}`), `${dexBtn}・${missBtn}`);
+    // 新しい版の札がある日の結果：その日の問題で出し、1問ごとの星は付けずに知らせる
+    await q.evaluate((d) => __mb.result("d", d), dN); await q.waitForTimeout(100);
+    const altStars = await q.locator(".rlist > div > span:first-child").allTextContents();
+    check("新しい版の札がある日の結果は、別の問題に星を付けず「読み直すと出る」と知らせる", await q.locator("#altnote").count() === 1 && altStars.length === 5 && altStars.every((t) => t === "—"), altStars.join(""));
+    // 新しい版で終えたあとからの回（読めない札）は、古い版で「続き」を押しても上書きしない（あとからの日がある 11/17 に時計を合わせる）
+    {
+      const qa = await newPage(); await closeHow(qa);
+      await qa.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
+      const dA = "2026-11-14", futA = { mode: "a", date: dA, id: "a" + dA, list: [...G.dailyTags(dA).slice(0, 4), "q:mirai-shikumi"], res: [0, 0, 0, 0, 0].map((m) => ({ m })), cur: null };
+      await qa.evaluate(([d, r]) => { const s = __mb.load(); s.runs["a:" + d] = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); }, [dA, futA]);
+      const lateA = await qa.evaluate(() => __mb.lateDays(__mb.load()));
+      await qa.evaluate((d) => __mb.startRun("a", d), dA); await qa.waitForTimeout(150);
+      const stA = await qa.evaluate((d) => __mb.load().runs["a:" + d], dA);
+      check("新しい版で終えたあとからの回は、古い版で開き直しても上書きしない", lateA.includes(dA) && JSON.stringify(stA?.list) === JSON.stringify(futA.list) && stA?.res?.length === 5, lateA.join(","));
+      await qa.context().close();
+    }
     await q.context().close();
   }
   {

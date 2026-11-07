@@ -558,7 +558,7 @@ function startRun(mode, opt) {
     if (mode === "a") {
       const ra = s.runs[runKey("a", opt)];
       if (!lateDays(s, k).includes(opt)) { ng = true; return; } // 期限は続きからより先に確かめる
-      if (ra && ra.date === opt && !doneOf(ra)) return;
+      if (ra && ra.date === opt && (!doneOf(ra) || !readable(ra))) return; // 新しい版で終えた回（読めない札）も上書きしない
       s.runs[runKey("a", opt)] = { mode, date: opt, list: G.dailyTags(opt), res: [], cur: null, id: "a" + opt, a0: achGot(s) };
       return;
     }
@@ -720,7 +720,8 @@ function untilNext() { const n = jstNow(), ms = 864e5 - (n.getTime() % 864e5); r
 function result(mode, k, first, prec, newAch = []) {
   const s = load(), rec = mode === "p" ? prec : bookOf(s, mode)[k];
   if (!rec) return home();
-  const list = mode === "p" ? prec.list : Array.isArray(rec.l) && rec.l.length === rec.m.length && rec.l.every(G.ok) ? rec.l : listOf(mode, k), total = rec.m.reduce((a, b) => a + b, 0), late = mode === "a", text = shareText(mode, k, rec);
+  const alt = mode !== "p" && Array.isArray(rec.l) && !(rec.l.length === rec.m.length && rec.l.every(G.ok)); // 新しい版の札：その日の問題で出し、1問ごとの星は付けない
+  const list = mode === "p" ? prec.list : !alt && Array.isArray(rec.l) ? rec.l : listOf(mode, k), total = rec.m.reduce((a, b) => a + b, 0), late = mode === "a", text = shareText(mode, k, rec);
   const showKofi = first && mode !== "p" && !late && total === 0 && !s.kofi[k + mode]; // あとから・練習・まちがいのある日には出さない
   if (showKofi) save((s2) => { s2.kofi[k + mode] = 1; });
   app.innerHTML = `
@@ -730,7 +731,8 @@ function result(mode, k, first, prec, newAch = []) {
     ${newAch.length ? `<p class="achnew" id="achnew">${newAch.map((id) => `🏅 実績：${ACH.find((a) => a[0] === id)[1]}`).join("<br>")}</p>` : ""}
     ${(() => { const nx = nextAch(s); return nx ? `<p class="achnext" id="achnext">🎯 あと${nx.left}${nx.unit}で「${nx.name}」</p>` : ""; })()}
     <p class="agrp">今日覚えたこと</p>
-    <div class="rlist">${list.map((tag, j) => { const P = G.make(tag); return `<div><span>${starStr(starsOf(rec.m[j]))}</span><span class="w"><b>${esc(P.title)}</b>${esc(P.why)}</span></div>`; }).join("")}</div>
+    ${alt ? `<p class="note" id="altnote">新しい版で解いた問題があります。ページを読み直すと、その問題と星が出ます。</p>` : ""}
+    <div class="rlist">${list.map((tag, j) => { const P = G.make(tag); return `<div><span>${alt ? "—" : starStr(starsOf(rec.m[j]))}</span><span class="w"><b>${esc(P.title)}</b>${esc(P.why)}</span></div>`; }).join("")}</div>
     ${late ? `<p class="note">あとから遊んだ日は、カレンダーに ↺ で残ります（続けた日には数えません）。</p><button class="main alt" id="go-cal">カレンダーへ</button>` : ""}
     ${mode !== "p" && !late ? `<div class="share">${esc(text)}</div>
     <button class="main" id="share">結果をシェア</button>
@@ -839,7 +841,7 @@ function about() {
   $("back").onclick = home; bindFooter(); toTop();
 }
 
-window.__mb = { mode: () => MODE, result, load, save, todayKey, dayNo, lateDays, ACH, achGot, nextAch, tally, shareText, streak, endlessList, practiceList, cur: () => cur, play: (m) => { if (m) MODE = m; play(); }, home, cal, book, about, EPOCH, KEY, G };
+window.__mb = { mode: () => MODE, result, startRun, load, save, todayKey, dayNo, lateDays, ACH, achGot, nextAch, tally, shareText, streak, endlessList, practiceList, cur: () => cur, play: (m) => { if (m) MODE = m; play(); }, home, cal, book, about, EPOCH, KEY, G };
 home();
 if ("serviceWorker" in navigator && location.protocol === "https:" && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
