@@ -315,6 +315,16 @@ try {
       check("新しい版で終えた記録前の回は、古い版で開いても先に記録して結果を出す（翌日に上書きしない・あとからに出さない）", JSON.stringify(stD.days[dD]?.l) === JSON.stringify(futD.list) && JSON.stringify(stD.days[dD]?.m) === "[0,1,0,2,0]" && !stD.runs.d && !lateD.includes(dD) && await qd.locator("#altnote").count() === 1, JSON.stringify(stD.days[dD]));
       await qd.context().close();
     }
+    // 終えて記録前の前の日の回が残ったまま「今日の5問」を始めても、置きかえる前に記録する（ホームを開いたあとに別のタブで答えたとき）
+    {
+      const qb = await newPage(); await closeHow(qb);
+      await qb.clock.setFixedTime(new Date("2026-11-17T03:00:00Z"));
+      const dB = "2026-11-16", lB = G.dailyTags(dB), runB = { mode: "d", date: dB, id: "B1", list: lB, res: [0, 0, 1, 0, 0].map((m) => ({ m })), cur: null };
+      await qb.evaluate((r) => { const s = __mb.load(); s.runs.d = r; localStorage.setItem(__mb.KEY, JSON.stringify(s)); __mb.startRun("d"); }, runB); await qb.waitForTimeout(150);
+      const stB = await qb.evaluate(() => __mb.load());
+      check("新しい回で置きかえる前に、終えて記録前の回を記録する", JSON.stringify(stB.days[dB]?.m) === "[0,0,1,0,0]" && stB.runs.d?.date === "2026-11-17", JSON.stringify(stB.days[dB]));
+      await qb.context().close();
+    }
     await q.context().close();
   }
   {
