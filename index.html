@@ -51,7 +51,7 @@ button.sub:disabled,button.main:disabled{opacity:.45;cursor:default}
 .note{color:var(--ink2);font-size:.85rem;line-height:1.7;margin:0;text-align:center}
 .note a,.about a,.tecard a{color:var(--shu2);display:inline-flex;align-items:center;min-height:44px}
 .big{font-weight:900;font-size:1.45rem;text-align:center;margin:0;line-height:1.35}
-.title{font-weight:900;font-size:2rem;letter-spacing:.1em;text-align:center;margin:6px 0 0;color:var(--mo2);line-height:1.25}
+.title{font-weight:900;font-size:2rem;letter-spacing:.1em;text-align:center;margin:6px 0 0;color:var(--mo2);line-height:1.25;flex:none}
 .title span{color:var(--shu)}
 .title small{display:block;font-size:.8rem;letter-spacing:.3em;color:var(--ink2);font-weight:700}
 .lead{text-align:center;color:var(--ink2);margin:0;font-size:.92rem;line-height:1.7}
@@ -169,7 +169,7 @@ dialog#howto h2{margin:0 0 10px;letter-spacing:.1em}
 dialog#howto ol{padding-left:1.3em;margin:0 0 12px;line-height:1.8}
 dialog#howto p{margin:0 0 10px;font-size:.9rem;line-height:1.7;color:var(--ink2)}
 dialog#howto a{color:var(--shu2);min-height:44px;display:inline-flex;align-items:center}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-weight:700;z-index:9;box-shadow:0 6px 20px #0005;max-width:90%;text-align:center;font-size:1rem}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-weight:700;z-index:9;box-shadow:0 6px 20px #0005;max-width:90%;text-align:center;font-size:1rem;pointer-events:none;}
 footer{margin-top:auto;text-align:center;font-size:.8rem;color:var(--ink2);display:flex;gap:4px 14px;justify-content:center;flex-wrap:wrap}
 footer a{color:var(--ink2);min-height:44px;display:inline-flex;align-items:center}
 .help{background:var(--paper);border:2px solid var(--mo);border-radius:14px;padding:.6rem .9rem;font-size:.88rem;line-height:1.7;text-align:left}
@@ -381,7 +381,7 @@ function practiceList(cat) {
   return shuffled(G.pool(cat || "all")).slice(0, 5);
 }
 const starsOf = (m) => (m === 0 ? 3 : m === 1 ? 2 : 1); // m = まちがい＋ヒントの数
-const starStr = (s) => `<span class="stars" aria-label="星${s}つ">${"★".repeat(s)}<span class="off">${"☆".repeat(3 - s)}</span></span>`;
+const starStr = (s) => `<span class="stars" role="img" aria-label="星${s}つ">${"★".repeat(s)}<span class="off" aria-hidden="true">${"☆".repeat(3 - s)}</span></span>`;
 
 // ---- 記録（この端末の localStorage だけ）----
 // days/hdays/adays：日付 → { m:[1問ごとのまちがい＋ヒント] }。adays はあとから遊んだ日（連続の日・今日の記録・Ko-fi には数えない）
@@ -453,7 +453,8 @@ function tidy(s) {
   return s;
 }
 // 保存の前に読み直す（別のタブで進めた記録を消さない）
-function save(fn) { const s = load(); fn(s); s.t = Math.max(Date.now(), (s.t || 0) + 1); const j = JSON.stringify(s); try { localStorage.setItem(KEY, j); mem = null; } catch (e) { mem = j; } return s; }
+function saveWarn(on) { let b = document.getElementById("savewarn"); const l = document.getElementById("msg"), W = "この端末に記録を保存できませんでした。ページを開き直すと、いまの記録が消えます"; if (!on) { if (b) { b.remove(); if (saveWarn.o) saveWarn.o.disconnect(); if (l && l.textContent.includes(W)) l.textContent = l.textContent.replace(W, "").replace(/^[。\s]+|[。\s]+$/g, ""); } return; } if (b) return; b = document.createElement("div"); b.id = "savewarn"; b.setAttribute("role", "status"); b.textContent = W; b.style.cssText = "position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#000;font-size:15px;line-height:1.5;text-align:center;pointer-events:none;border-bottom:2px solid #8a6d00"; (document.body || document.documentElement).prepend(b); if (l) { l.textContent = W; if (window.MutationObserver) { saveWarn.o = new MutationObserver(() => { if (document.getElementById("savewarn") && l.textContent && !l.textContent.includes(W)) l.textContent += "。" + W; }); saveWarn.o.observe(l, { childList: true, characterData: true, subtree: true }); } } } // 帯は画面のいちばん上に場所を取り（ボタンに重ならない）、#msg でも読み上げる。ほかの知らせで #msg が書き換わっても、保存できないあいだは警告を後ろに付け直す。保存できたら帯と #msg の警告を消す（黙って記録が消えないように・古い警告を読み上げないように）
+function save(fn) { const s = load(); fn(s); s.t = Math.max(Date.now(), (s.t || 0) + 1); const j = JSON.stringify(s); try { localStorage.setItem(KEY, j); mem = null; saveWarn(false); } catch (e) { mem = j; saveWarn(true); } return s; }
 function streak(days) { let k = todayKey(), n = 0; if (!days[k]) k = prevDay(k); while (days[k]) { n++; k = prevDay(k); } return n; }
 const playedDays = (s) => new Set([...Object.keys(s.days), ...Object.keys(s.adays)]).size;
 // 集めたしくみの数は、この版にあるしくみだけで数える（知らない id は残すが、数にも「ぜんぶ集めた」にも入れない）
@@ -622,14 +623,14 @@ function play() {
   $("back").onclick = home;
   document.querySelectorAll(".ch").forEach((b) => (b.onclick = () => choose(+b.dataset.j)));
   if ($("hint")) $("hint").onclick = hint;
-  if ($("quit")) $("quit").onclick = () => { if (cur && cur.done) return; finish(); };
+  if ($("quit")) $("quit").onclick = () => finish(); // 正解した直後でも降りられる（正解は choose で保存ずみ。二度押しは endFinish の edone で守る）
   paint();
   toTop();
 }
 // ヒント2：まちがいの選び肢を1つ消す（消す順は選び肢の並びの順）
 // 2回目のヒントは、消せるまちがいの選び肢が2つ以上あるときだけ（二択では1回まで）
 const hmax = () => (cur.hints >= 2 || cur.P.opts.filter((_, j) => j !== cur.P.ans && !cur.wrong.includes(j)).length > 1 ? 2 : 1);
-const cutOf = () => { if (cur.hints < 2) return []; const left = cur.P.opts.map((_, j) => j).filter((j) => j !== cur.P.ans && !cur.wrong.includes(j)); return left.length > 1 ? left.slice(0, 1) : []; };
+const cutOf = () => (cur.hints < 2 ? [] : cur.P.opts.map((_, j) => j).filter((j) => j !== cur.P.ans).slice(0, -1)); // まちがいを選んでも、消した選び肢は戻さない
 function paint() {
   const cut = cutOf();
   document.querySelectorAll(".ch").forEach((b) => { const j = +b.dataset.j, ng = cur.wrong.includes(j) || cut.includes(j); b.classList.toggle("ng", ng); b.disabled = ng || cur.done; b.setAttribute("aria-label", cur.P.opts[j] + (ng ? "（ちがう）" : "")); });
@@ -666,6 +667,7 @@ function choose(j) {
   const st = starsOf(m), r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length;
   document.querySelectorAll(".ch").forEach((b) => { b.disabled = true; if (+b.dataset.j === P.ans) { b.classList.add("ok"); b.setAttribute("aria-label", P.opts[P.ans] + "（正解）"); } });
   if ($("hint")) { $("hint").disabled = true; $("hint").hidden = true; }
+  if ($("quit") && r) $("quit").textContent = `ここで降りる（${r.res.length}問で終える）`; // 正解した分も数に入れる
   $("hintbox").innerHTML = ""; $("msg").className = "msg"; $("msg").textContent = "";
   const te = P.te ? G.BYTE[P.te] : null;
   $("after").innerHTML = `<div class="verdict" role="status">
