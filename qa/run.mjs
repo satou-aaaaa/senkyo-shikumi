@@ -254,6 +254,34 @@ try {
   check("とことんはまちがえても終わらない", await p.locator(".verdict").count() === 0 && await p.locator(".ch").count() >= 2 && await p.locator("#quit").count() === 1);
   await p.click("#quit"); await p.waitForTimeout(150);
   check("「ここで降りる」で終わり、一度で正解した数（2問）が自己ベスト", (await mem(p)).ebest === 2 && (await p.textContent("#eres")).includes("2問"));
+  { // とことんで正解した直後（次へを押す前）でも「ここで降りる」で終われ、正解した1問が数に入る（2026-11-17）
+    const q = await newPage(); await closeHow(q); await q.click("#go-e"); await solve(q);
+    const lab = await q.textContent("#quit"); await q.click("#quit"); await q.waitForTimeout(150);
+    check("とことんで正解した直後でも「ここで降りる」で終わり、正解した1問が数に入る（ボタンも「1問で終える」）", lab.includes("1問で終える") && await q.locator("#eres").count() === 1 && (await q.textContent("#eres")).includes("1問") && (await mem(q)).ebest === 1, lab);
+    await q.close();
+  }
+  { // ヒント2で消した選び肢は、残ったまちがいを選んでも戻らない（2026-11-17）
+    const q = await newPage(); await closeHow(q); await q.click("#go-d"); await q.click("#hint"); await q.click("#hint");
+    const cut0 = await q.evaluate(() => [...document.querySelectorAll(".ch.ng")].map((b) => b.dataset.j));
+    const left = await q.evaluate(() => { const c = __mb.cur(); return [...document.querySelectorAll(".ch:not(.ng)")].map((b) => +b.dataset.j).find((j) => j !== c.P.ans); });
+    await q.click(`.ch[data-j="${left}"]`);
+    const r = await q.evaluate((c0) => ({ en: [...document.querySelectorAll(".ch:not(:disabled)")].map((b) => +b.dataset.j), ans: __mb.cur().P.ans, back: c0.every((j) => document.querySelector(`.ch[data-j="${j}"]`).classList.contains("ng")) }), cut0);
+    check("ヒント2のあとに残ったまちがいを選ぶと、正解だけが残り、消した選び肢は戻らない", cut0.length === 1 && r.back && r.en.length === 1 && r.en[0] === r.ans, JSON.stringify([cut0, r]));
+    await solve(q);
+    const st = await q.evaluate(() => { const e = document.querySelector(".verdict .stars"), o = e && e.querySelector(".off"); return { role: e && e.getAttribute("role"), lab: e && e.getAttribute("aria-label"), off: o ? o.textContent : "", hid: o && o.getAttribute("aria-hidden") }; });
+    check("星は role=img と「星Nつ」で読まれ、取れなかった星は ☆（読み上げでは隠す）で色だけに頼らない", st.role === "img" && /^星[0-3]つ$/.test(st.lab) && /^☆+$/.test(st.off) && st.hid === "true", JSON.stringify(st));
+    await q.close();
+  }
+  { // ホームの題が縦に伸びない（2026-11-17）
+    const bad = [];
+    for (const [w, h] of [[390, 844], [820, 1180]]) {
+      const c = await browser.newContext({ viewport: { width: w, height: h } }); const q = await newPage(w, c); await closeHow(q);
+      const m = await q.$eval("h1.title", (e) => ({ h: e.getBoundingClientRect().height, f: parseFloat(getComputedStyle(e).fontSize) }));
+      if (!(m.h > 0 && m.h <= m.f * 2)) bad.push(`${w}x${h}:${JSON.stringify(m)}`);
+      await c.close();
+    }
+    check("390×844 と 820×1180 で、ホームの題（h1.title）の高さが字の高さの2倍を超えない", bad.length === 0, bad.join(" "));
+  }
   {
     // 古いタブで終えた回を、別のタブがもう一度終えても書き戻さない
     const q = await newPage(); await closeHow(q);
@@ -488,6 +516,31 @@ try {
   const sample = { "senkyo-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2] } }, hdays: {}, adays: {}, dex: { senkyoken: 2, dont: 1 }, co: 3, miss: ["q:senkyoken"], runs: {}, kofi: {}, ach: {}, ebest: 7, edone: [], t: 1 }) };
   await checkTransfer({ browser, url, game: "senkyo-shikumi", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
+// 保存できないとき：帯 #savewarn でちょうど1つ知らせ、2秒たっても残り、保存できるようになったら消える（2026-11-17。黙って記録が消えないように）
+{
+  const cw = await browser.newContext({ viewport: { width: 390, height: 800 } });
+  await cw.addInitScript(() => { window.__origSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; });
+  const pw = await cw.newPage(); await pw.goto(url); await pw.waitForTimeout(300);
+  const nW = () => pw.evaluate(() => document.querySelectorAll("#savewarn").length);
+  if (!(await pw.isVisible("#howto-ok"))) await pw.click("#f-how");
+  await pw.click("#howto-ok"); await pw.waitForTimeout(100);
+  const n1 = await nW(), txt = await pw.evaluate(() => (document.getElementById("savewarn") || {}).textContent || "");
+  await pw.waitForTimeout(2000); const n2 = await nW();
+  await pw.evaluate(() => { Storage.prototype.setItem = window.__origSetItem; });
+  await pw.click("#f-how"); await pw.click("#howto-ok"); await pw.waitForTimeout(100); const n3 = await nW();
+  check("保存できないブラウザで遊ぶと、帯（#savewarn）でちょうど1つ知らせ、2秒たっても残る・保存できるようになったら消える", n1 === 1 && n2 === 1 && txt.includes("保存できませんでした") && n3 === 0, JSON.stringify([n1, n2, n3, txt]));
+  await cw.close();
+}
+// 知らせ（.toast）が出ているあいだも、その下のボタンを押せる（2026-11-17。知らせがボタンをふさがないように）
+{
+  const ct = await browser.newContext({ viewport: { width: 390, height: 800 } });
+  const pt = await ct.newPage(); await pt.goto(url); await pt.waitForTimeout(300);
+  const at = await pt.evaluate(() => { const d = document.getElementById("howto"); if (d && d.open && d.close) d.close(); toast("おしらせの検査"); const t = [...document.querySelectorAll(".toast")].pop(), r = t.getBoundingClientRect(), b = document.createElement("button"); b.id = "qa-under"; b.textContent = "下"; b.style.cssText = "position:fixed;left:0;bottom:0;width:100%;height:" + (innerHeight - r.top + 10) + "px;z-index:1"; b.onclick = () => { b.dataset.hit = "1"; }; document.body.appendChild(b); return { x: r.left + r.width / 2, y: r.top + r.height / 2, pe: getComputedStyle(t).pointerEvents }; });
+  await pt.mouse.click(at.x, at.y); await pt.waitForTimeout(50);
+  const hit = await pt.evaluate(() => { const b = document.getElementById("qa-under"), on = !!document.querySelector(".toast"), h = b.dataset.hit === "1"; b.remove(); return on && h; });
+  check("知らせ（.toast）が出ているあいだも、その下のボタンを押せる（pointer-events:none）", at.pe === "none" && hit, JSON.stringify(at));
+  await ct.close();
+}
 await browser.close();
 server.close();
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));
