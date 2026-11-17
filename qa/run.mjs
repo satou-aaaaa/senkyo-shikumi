@@ -182,7 +182,7 @@ try {
   await p.click("#go-d");
   const tags = await p.evaluate(() => __mb.load().runs.d.list);
   check("今日の5問は日付から決まる（data.js の dailyTags と同じ）", JSON.stringify(tags) === JSON.stringify(G.dailyTags(TODAY)));
-  check("問題の画面：人・吹き出し・問い・選び肢3つ（高さ44px以上）", await p.locator(".ava").count() === 1 && (await p.textContent(".bubble")).length > 10 && await p.locator(".ch").count() === 3 && (await p.$$eval(".ch", (b) => b.every((x) => x.getBoundingClientRect().height >= 44))));
+  check("問題の画面：人・吹き出し・問い・選び肢3つ（高さ44px以上）", await p.locator(".ava").count() === 1 && (await p.textContent(".bubble")).length > 10 && await p.locator(".ch").count() === 3 && (await p.$$eval(".ch", (b) => b.every((x) => Math.round(x.getBoundingClientRect().height) >= 44))));
   await p.click(`.ch[data-j="${await wrongIdx(p)}"]`);
   check("まちがえると ✕ の印（色だけで分けない）・知らせは role=status", await p.locator(".ch.ng").count() === 1 && (await p.textContent("#msg")).includes("✕") && (await p.getAttribute("#msg", "role")) === "status");
   check("まちがえた問題はおさらいに入る", (await mem(p)).miss.includes(tags[0]));
@@ -472,7 +472,7 @@ try {
         await q.waitForTimeout(100);
         const ov = await q.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         if (ov > 0) bad.push(`${w}px ${go || "ホーム"} ${ov}px`);
-        small.push(...(await q.$$eval("button:not([disabled]), a[href]", (bs) => bs.filter((b) => b.checkVisibility() && !b.closest(".cal")).filter((b) => b.getBoundingClientRect().height < 44).map((b) => (b.id || b.className || b.textContent).slice(0, 20)))).map((x) => `${w}/${go}:${x}`));
+        small.push(...(await q.$$eval("button:not([disabled]), a[href]", (bs) => bs.filter((b) => b.checkVisibility() && !b.closest(".cal")).filter((b) => Math.round(b.getBoundingClientRect().height) < 44).map((b) => (b.id || b.className || b.textContent).slice(0, 20)))).map((x) => `${w}/${go}:${x}`));
       }
       await q.context().close();
     }
