@@ -119,6 +119,9 @@ const contrastFn = (skip) => {
     if (!own) continue;
     const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
     if (r.width < 1 || r.height < 1 || cs.visibility === "hidden" || +cs.opacity === 0) continue;
+    // 透明な（opacity 0 の）親の中の字は見えないので測らない（madori-puzzle #17・kippu-10 #22 の CodeRabbit）
+    let hid = false; for (let a = el.parentElement; a && !hid; a = a.parentElement) hid = +getComputedStyle(a).opacity === 0;
+    if (hid) continue;
     if (el.disabled || el.getAttribute("aria-disabled") === "true") continue; // 押せない部品は WCAG の対象外
     let fg = parse(cs.color); if (!fg) continue;
     // うしろの色：自分から上へ、色を重ねていく。絵・グラデーションがあれば測らない
@@ -201,7 +204,7 @@ for (const sc of screens) {
         const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
         // 中の字は、その字の箱が外にはみ出しているときだけ数える（絵や積み木がはみ出すだけの入れ物を数えない）
         const out = (c) => { const r = c.getBoundingClientRect(); return r.width > 0 && (r.bottom > b.bottom + 2 || r.right > b.right + 2 || r.top < b.top - 2 || r.left < b.left - 2); };
-        const inner = !own && [...el.querySelectorAll("*")].some((c) => getComputedStyle(c).display.startsWith("inline") && !c.closest("svg,canvas,[aria-hidden=true],[hidden]") && [...c.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && out(c));
+        const inner = [...el.querySelectorAll("*")].some((c) => getComputedStyle(c).display.startsWith("inline") && !c.closest("svg,canvas,[aria-hidden=true],[hidden]") && [...c.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && out(c));
         if (!own && !inner) continue;
         if (inner || el.scrollHeight > el.clientHeight + 2 || el.scrollWidth > el.clientWidth + 2) cut.push(`${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}「${el.textContent.trim().slice(0, 10)}」`);
       }
@@ -221,6 +224,14 @@ for (const sc of screens) {
   }));
   check("端末の「視差効果を減らす」で動きを減らす設定が入り、動き続けるアニメーションが無い（WCAG 2.3.3）", r.calm && r.moving.length === 0, r.moving.join(","));
   await ctx.close();
+  // 開いたあとに端末の設定を変えても効かせる（自分で決めていないとき。v7、hatsuden-kurabe #1 の CodeRabbit）
+  const later = await openPage();
+  const before = await later.page.evaluate(() => document.documentElement.classList.contains("a11y-calm"));
+  await later.page.emulateMedia({ reducedMotion: "reduce" });
+  await later.page.waitForTimeout(100);
+  const after = await later.page.evaluate(() => document.documentElement.classList.contains("a11y-calm"));
+  check("開いたあとに端末の「視差効果を減らす」を入れても、動きを減らす設定が入る", !before && after);
+  await later.ctx.close();
 }
 
 // 6・7・8・1 の続き：キーボード・名前・知らせの場所・斜体・開くボタン
@@ -246,7 +257,9 @@ for (const sc of screens) {
     await page.keyboard.press("Tab");
     const f = await page.evaluate(() => {
       const el = document.activeElement; if (!el || el === document.body) return null;
-      const look = () => { const cs = getComputedStyle(el); return { ol: cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) >= 2 ? `${cs.outlineStyle} ${cs.outlineWidth} ${cs.outlineColor} ${cs.outlineOffset}` : "", bs: cs.boxShadow && cs.boxShadow !== "none" ? cs.boxShadow : "" }; };
+      // 透明な色の枠・影は見えないので数えない（madori-puzzle #17 の CodeRabbit）
+      const clear = (c) => c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
+      const look = () => { const cs = getComputedStyle(el); const bs = (cs.boxShadow || "none").split(/,(?![^(]*\))/).filter((x) => x.trim() !== "none" && !/rgba\([^)]*,\s*0\)/.test(x)).join(","); return { ol: cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) >= 2 && !clear(cs.outlineColor) ? `${cs.outlineStyle} ${cs.outlineWidth} ${cs.outlineColor} ${cs.outlineOffset}` : "", bs }; };
       const on = look(); el.blur(); const off = look(); el.focus(); // キーボードで動かしたあとの focus() は focus-visible のまま
       return { ok: !!((on.ol && on.ol !== off.ol) || (on.bs && on.bs !== off.bs)), name: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") };
     });
@@ -263,7 +276,8 @@ for (const sc of screens) {
   let live = false;
   for (const sc of screens) {
     const { ctx, page } = await openPage();
-    try { await go(page, sc); live = live || await page.evaluate(() => [...document.querySelectorAll("[aria-live],[role=status],[role=alert]")].some((el) => el.getAttribute("aria-live") !== "off" && !el.closest("[aria-hidden=true],[hidden],[inert]"))); } catch { /* 上で数えた */ }
+    // display:none の場所は読み上げられないので数えない。画面を開けなかったら隠さず落とす（kippu-10 #22・onpu-yomi #1 の CodeRabbit）
+    try { await go(page, sc); live = live || await page.evaluate(() => [...document.querySelectorAll("[aria-live],[role=status],[role=alert]")].some((el) => el.getAttribute("aria-live") !== "off" && !el.closest("[aria-hidden=true],[hidden],[inert]") && el.getClientRects().length > 0)); } catch (e) { check(`知らせの場所を数える画面を開ける：${sc.name}`, false, e.message); }
     await ctx.close();
   }
   check("正解・まちがいなどの知らせを読み上げソフトに伝える場所がある（aria-live か role=status。aria-hidden・hidden の中は数えない。WCAG 4.1.3）", live);
@@ -283,6 +297,18 @@ for (const sc of screens) {
   // 別のタブで変えた設定を、このタブの保存で消さない（2026-11-05 CodeRabbit）
   const merged = await page.evaluate(() => { const s = JSON.parse(localStorage.getItem("a11y-v1") || "{}"); s.ruby = true; localStorage.setItem("a11y-v1", JSON.stringify(s)); window.A11y.set("calm", true); const t = JSON.parse(localStorage.getItem("a11y-v1") || "{}"); return t.ruby === true && t.calm === true && t.read === true; });
   check("別のタブで変えた見やすさの設定を、このタブの保存で消さない", merged);
+  // 保存できないとき、あとの変更で前の変更（まだ保存できていない）を、読み直した古い値で消さない（v7、nenkin-shikumi #1 の CodeRabbit）
+  const kept2 = await page.evaluate(() => {
+    localStorage.setItem("a11y-v1", JSON.stringify({ read: false, cvd: false }));
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) { if (k === "a11y-v1") throw new Error("QuotaExceededError"); return real.call(this, k, v); };
+    try { window.A11y.set("read", true); window.A11y.set("cvd", true); } finally { Storage.prototype.setItem = real; }
+    const on = window.A11y.on("read") && window.A11y.on("cvd") && ["a11y-read", "a11y-cvd"].every((c) => document.documentElement.classList.contains(c));
+    window.A11y.set("ruby", false);
+    const t = JSON.parse(localStorage.getItem("a11y-v1") || "{}");
+    return on && t.read === true && t.cvd === true;
+  });
+  check("保存できないあいだに変えた見やすさの設定を、次の変更で消さない・保存できたらまとめて書く", kept2);
   // 保存した値がオブジェクトでなくても、設定のボタンと window.A11y が動く
   await page.evaluate(() => localStorage.setItem("a11y-v1", "true"));
   await page.reload(); await page.waitForTimeout(300);
