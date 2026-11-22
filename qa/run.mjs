@@ -14,6 +14,7 @@ import { checkSwStall } from "./sw-check.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
 const check = (name, ok, detail = "") => results.push({ name, ok: !!ok, detail: String(detail).slice(0, 400) });
+const firstClose = async (q) => { if (await q.locator("#howto[open]").count()) await q.click("#howto-ok"); if (await q.locator("#core-coach").count()) { await q.evaluate(() => Core.coach.leave()); await q.waitForTimeout(100); } }; // はじめての練習の吹き出しをやめてホームへ（sync-template の migrateFirstQa が足した）
 const G = createRequire(import.meta.url)(path.join(root, "data.js"));
 const len = (s) => [...String(s)].length;
 
@@ -141,7 +142,7 @@ async function newPage(w = 390, ctx) {
   await p.goto(url); await p.waitForTimeout(200);
   return p;
 }
-const closeHow = async (p) => { if (await p.locator("#howto[open]").count()) await p.click("#howto-ok"); };
+const closeHow = async (p) => { await firstClose(p); };
 const ansIdx = (p) => p.evaluate(() => __mb.cur().P.ans);
 const wrongIdx = (p) => p.evaluate(() => { const c = __mb.cur(); return c.P.opts.findIndex((_, j) => j !== c.P.ans && !c.wrong.includes(j)); });
 const mem = (p) => p.evaluate(() => JSON.parse(localStorage.getItem("senkyo-v1") || "{}"));
@@ -164,17 +165,17 @@ try {
   {
     // cancel（Esc）のその場で保存する。close を待たずに見る。保存に失敗したら close でもう一度保存する（CodeRabbit の指摘）
     const q = await newPage();
-    const atCancel = await q.evaluate(() => { const d = document.getElementById("howto"); d.dispatchEvent(new Event("cancel")); return JSON.parse(localStorage.getItem("senkyo-v1") || "{}").tut === true; });
+    const atCancel = await q.evaluate(() => { localStorage.clear(); const d = document.getElementById("howto"); if (!d.open) d.showModal(); d.dispatchEvent(new Event("cancel")); return JSON.parse(localStorage.getItem("senkyo-v1") || "{}").tut === true; });
     check("遊び方を Esc で閉じたその場（close の前）に「見た」を保存する", atCancel);
     await q.context().close();
     const q2 = await newPage();
-    const retried = await q2.evaluate(() => { const ls = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; const d = document.getElementById("howto"); d.dispatchEvent(new Event("cancel")); Storage.prototype.setItem = ls; const before = JSON.parse(localStorage.getItem("senkyo-v1") || "{}").tut === true; d.close(); return new Promise((res) => setTimeout(() => res(!before && JSON.parse(localStorage.getItem("senkyo-v1") || "{}").tut === true), 100)); });
+    const retried = await q2.evaluate(() => { const ls = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; localStorage.clear(); const d = document.getElementById("howto"); if (!d.open) d.showModal(); d.dispatchEvent(new Event("cancel")); Storage.prototype.setItem = ls; const before = JSON.parse(localStorage.getItem("senkyo-v1") || "{}").tut === true; d.close(); return new Promise((res) => setTimeout(() => res(!before && JSON.parse(localStorage.getItem("senkyo-v1") || "{}").tut === true), 100)); });
     check("Esc のときの保存に失敗しても、閉じたときに「見た」を保存し直す", retried);
     await q2.context().close();
   }
   const p = await newPage();
-  check("はじめて開くと遊び方が出る", await p.locator("#howto[open]").count() === 1);
-  await p.click("#howto-ok");
+  check("はじめて開くと遊び方が出る", await p.locator("#core-coach").waitFor({ timeout: 3000 }).then(() => true, () => false));
+  await firstClose(p);
   check("ホームに今日の心得と、総務省「なるほど！選挙」へのリンク・選挙管理委員会で確かめる一言が出る", (await p.textContent("#tip")).includes("今日の心得") && (await p.textContent(".help")).includes("選挙管理委員会") && await p.locator(".help a[href*='soumu.go.jp']").count() === 1);
   check("はじめての日から上級・とことん・練習を押せる（鍵なし）", await p.locator("#go-h:not([disabled])").count() === 1 && await p.locator("#go-e:not([disabled])").count() === 1 && await p.locator("#go-p:not([disabled])").count() === 1);
 
@@ -514,7 +515,7 @@ try {
 // 引き継ぎコード（shared-workflows template/qa/transfer-check.mjs）
 try {
   const sample = { "senkyo-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2] } }, hdays: {}, adays: {}, dex: { senkyoken: 2, dont: 1 }, co: 3, miss: ["q:senkyoken"], runs: {}, kofi: {}, ach: {}, ebest: 7, edone: [], t: 1 }) };
-  await checkTransfer({ browser, url, game: "senkyo-shikumi", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
+  await checkTransfer({ browser, url, game: "senkyo-shikumi", sample, check, open: async (pg) => { await firstClose(pg); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
 // 保存できないとき：帯 #savewarn でちょうど1つ知らせ、2秒たっても残り、保存できるようになったら消える（2026-11-17。黙って記録が消えないように）
 {
@@ -522,12 +523,12 @@ try {
   await cw.addInitScript(() => { window.__origSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; });
   const pw = await cw.newPage(); await pw.goto(url); await pw.waitForTimeout(300);
   const nW = () => pw.evaluate(() => document.querySelectorAll("#savewarn").length);
-  if (!(await pw.isVisible("#howto-ok"))) await pw.click("#f-how");
-  await pw.click("#howto-ok"); await pw.waitForTimeout(100);
+  if (!(await pw.isVisible("#howto-ok"))) await firstClose(pw).then(() => pw.click("#f-how"));
+  await firstClose(pw); await pw.waitForTimeout(100);
   const n1 = await nW(), txt = await pw.evaluate(() => (document.getElementById("savewarn") || {}).textContent || "");
   await pw.waitForTimeout(2000); const n2 = await nW();
   await pw.evaluate(() => { Storage.prototype.setItem = window.__origSetItem; });
-  await pw.click("#f-how"); await pw.click("#howto-ok"); await pw.waitForTimeout(100); const n3 = await nW();
+  await firstClose(pw).then(() => pw.click("#f-how")); await firstClose(pw); await pw.waitForTimeout(100); const n3 = await nW();
   check("保存できないブラウザで遊ぶと、帯（#savewarn）でちょうど1つ知らせ、2秒たっても残る・保存できるようになったら消える", n1 === 1 && n2 === 1 && txt.includes("保存できませんでした") && n3 === 0, JSON.stringify([n1, n2, n3, txt]));
   await cw.close();
 }
