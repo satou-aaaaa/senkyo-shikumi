@@ -14,7 +14,7 @@ import { checkSwStall } from "./sw-check.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
 const check = (name, ok, detail = "") => results.push({ name, ok: !!ok, detail: String(detail).slice(0, 400) });
-const firstClose = async (q) => { if (await q.locator("#howto[open]").count()) await q.click("#howto-ok"); if (await q.locator("#core-coach").count()) { await q.evaluate(() => Core.coach.leave()); await q.waitForTimeout(100); } }; // はじめての練習の吹き出しをやめてホームへ（sync-template の migrateFirstQa が足した）
+const firstClose = async (q) => { if (await q.locator("#howto[open]").count()) await q.click("#howto-ok"); if (await q.evaluate(() => !!(window.Core && Core.coach && Core.coach.active()))) { await q.evaluate(() => { Core.coach.leave(); scrollTo(0, 0); }); await q.waitForTimeout(100); } }; // はじめての練習の吹き出しをやめてホームへ（sync-template の migrateFirstQa が足した）
 const G = createRequire(import.meta.url)(path.join(root, "data.js"));
 const len = (s) => [...String(s)].length;
 
@@ -177,6 +177,7 @@ try {
   check("はじめて開くと遊び方が出る", await p.locator("#core-coach").waitFor({ timeout: 3000 }).then(() => true, () => false));
   await firstClose(p);
   check("ホームに今日の心得と、総務省「なるほど！選挙」へのリンク・選挙管理委員会で確かめる一言が出る", (await p.textContent("#tip")).includes("今日の心得") && (await p.textContent(".help")).includes("選挙管理委員会") && await p.locator(".help a[href*='soumu.go.jp']").count() === 1);
+  await firstClose(p);
   check("はじめての日から上級・とことん・練習を押せる（鍵なし）", await p.locator("#go-h:not([disabled])").count() === 1 && await p.locator("#go-e:not([disabled])").count() === 1 && await p.locator("#go-p:not([disabled])").count() === 1);
 
   // 今日の5問：1問目はまちがえる、4問目はヒント2回、ほかはそのまま
@@ -523,12 +524,12 @@ try {
   await cw.addInitScript(() => { window.__origSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; });
   const pw = await cw.newPage(); await pw.goto(url); await pw.waitForTimeout(300);
   const nW = () => pw.evaluate(() => document.querySelectorAll("#savewarn").length);
-  if (!(await pw.isVisible("#howto-ok"))) await firstClose(pw).then(() => pw.click("#f-how"));
+  if (!(await pw.isVisible("#howto-ok"))) await firstClose(pw).then(() => pw.evaluate(() => openHow()));
   await firstClose(pw); await pw.waitForTimeout(100);
   const n1 = await nW(), txt = await pw.evaluate(() => (document.getElementById("savewarn") || {}).textContent || "");
   await pw.waitForTimeout(2000); const n2 = await nW();
   await pw.evaluate(() => { Storage.prototype.setItem = window.__origSetItem; });
-  await firstClose(pw).then(() => pw.click("#f-how")); await firstClose(pw); await pw.waitForTimeout(100); const n3 = await nW();
+  await firstClose(pw).then(() => pw.evaluate(() => openHow())); await firstClose(pw); await pw.waitForTimeout(100); const n3 = await nW();
   check("保存できないブラウザで遊ぶと、帯（#savewarn）でちょうど1つ知らせ、2秒たっても残る・保存できるようになったら消える", n1 === 1 && n2 === 1 && txt.includes("保存できませんでした") && n3 === 0, JSON.stringify([n1, n2, n3, txt]));
   await cw.close();
 }
