@@ -95,6 +95,8 @@ const len = (s) => [...String(s)].length;
 
 // ---- 2. ファイルの中身 ----
 const html = readFileSync(path.join(root, "index.html"), "utf8"), data = readFileSync(path.join(root, "data.js"), "utf8"), readme = readFileSync(path.join(root, "README.md"), "utf8");
+// ひな形の写し（<!-- 名前:begin〜end -->）はゲームの言葉ではないので外し、Core.kofi・Core.KOFI は写す前の形にもどして見る（shared-workflows の sync-template が足した）
+const gameOwn = (t) => t.replace(/<!-- ([a-z0-9-]+):begin[\s\S]*?<!-- \1:end -->/g, "").split("${Core.KOFI}").join("https://ko-fi.com/satouaaaaa").replace(/Core\.kofi\(("(?:[^"\\]|\\.)*"), ("(?:[^"\\]|\\.)*")\)/g, (m, a, b) => "`<p class=\"note kofi\">" + JSON.parse(a) + "、<a href=\"https://ko-fi.com/satouaaaaa\" target=\"_blank\" rel=\"noopener\">Ko-fi でコーヒー1杯の応援</a>をもらえると、" + JSON.parse(b) + "の励みになります（任意・遊ぶのはずっと無料）。</p>`");
 const ext = [...html.matchAll(/(?:src|href)="(https?:[^"]+)"/g)].map((m) => m[1]).filter((u) => !/^https:\/\/fonts\.googleapis\.com(\/|$)|^https:\/\/ko-fi\.com\/satouaaaaa$/.test(u));
 check("外から読むのは文字（Google Fonts）だけ。スクリプト・広告・解析を入れない", ext.length === 0 && ![...html.matchAll(/<script[^>]+src="([^"]+)"/g)].some((m) => /^https?:/.test(m[1])), ext.join(","));
 check("出典はすべて e-Gov 法令検索か総務省のページ", Object.values(G.SRC).every(([, u]) => /^https:\/\/(laws\.e-gov\.go\.jp|www\.soumu\.go\.jp)\//.test(u)));
@@ -103,7 +105,7 @@ check("Math.random は練習・とことんだけ（今日の5問・上級は日
 check("乱数は sort の比較の中で引かない（ブラウザで引く回数が変わる）", !/\.sort\(\s*\([^)]*\)\s*=>[^\n;]*\b(R|rng|rand|Math\.random)\s*\(/.test(html + data));
 check("一行の式の途中にコメント // を足さない（行の残りが消える。rosen-hitofude 2026-11-04）", !/;\s*\/\/[^\n]*;\s*\w/.test(data.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n")));
 check("特定の政党・候補者を応援も評価もしない：計算の党は記号だけ・「このゲームについて」に書く・実在の政党名を出さない", /本物の政党ではありません/.test(html) && /応援したり、評価したりしません/.test(html) && /本物の政党ではありません/.test(readme) && G.PARTY.every((p) => /^[A-E]党$/.test(p)) && !/自民|立憲|維新|公明|共産|国民民主|れいわ|参政|社民|保守党|NHK党/.test(html + data));
-check("チケット・回数制限・🔒で開くモードを入れない（好きなだけ遊べる）", !/🎫|チケット|🔒|すると開く|あとで開く|スタミナ|回復まで/.test(html));
+check("チケット・回数制限・🔒で開くモードを入れない（好きなだけ遊べる）", !/🎫|チケット|🔒|すると開く|あとで開く|スタミナ|回復まで/.test(gameOwn(html)));
 check("画面にお笑いの言葉を入れない（本物っぽく）", !/お笑い|ギャグ|ツッコミ|なんでやねん|（うそ）|ｗｗ/.test(html + data));
 check("実在の会社名・人名・ブランドを出さない（人物は名字＋年代だけ）", !/株式会社|有限会社|Amazon|楽天|メルカリ|LINEヤフー/.test(data));
 check("引き継ぎ：transfer.js をゲームの script より前に、このゲームの記録のキーだけで読む", /<script src="transfer\.js" data-game="senkyo-shikumi" data-keys="senkyo-v1"><\/script>\s*<\/head>/.test(html) && html.indexOf('src="transfer.js"') < html.indexOf('src="data.js"') && /data-hk/.test(html) && existsSync(path.join(root, "transfer.js")));
